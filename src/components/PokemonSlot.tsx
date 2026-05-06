@@ -210,9 +210,24 @@ const PokemonSlotImpl: React.FC<PokemonSlotProps> = ({
                 // [contain:layout] is Tailwind arbitrary syntax.
                 '[contain:layout] [border-radius:var(--pp-slot-radius)]',
                 borderClass,
-                isReadyToGuess
-                    ? 'hover:scale-110 hover:shadow-[0_0_14px_rgba(34,197,94,0.6)] active:scale-95'
-                    : 'hover:scale-105 active:scale-95',
+                // In flow mode, Tailwind's `hover:scale-*` (which compiles to
+                // the standalone `scale: N` property in v4) works fine because
+                // there's no inline `transform: translate()` for it to
+                // multiply against. In absolute mode (PERF-12), the standalone
+                // `scale` property is applied AFTER the `transform` matrix
+                // per CSS Transforms L2, so it scales the translate vector by
+                // N — slots far down the page jump dramatically downward on
+                // hover (visible bug 2026-05-06: #1023 jumps ~110px). We swap
+                // to a CSS variable that composes inside the same `transform`
+                // string, so scale and translate live in the same matrix
+                // multiplication and the translate stays put.
+                absolutePosition !== undefined
+                    ? (isReadyToGuess
+                        ? 'hover:[--slot-scale:1.1] active:[--slot-scale:0.95] hover:shadow-[0_0_14px_rgba(34,197,94,0.6)]'
+                        : 'hover:[--slot-scale:1.05] active:[--slot-scale:0.95]')
+                    : (isReadyToGuess
+                        ? 'hover:scale-110 hover:shadow-[0_0_14px_rgba(34,197,94,0.6)] active:scale-95'
+                        : 'hover:scale-105 active:scale-95'),
                 isShiny && isChecked && 'shadow-[0_0_10px_rgba(255,215,0,0.4)]',
             )}
             style={{
@@ -226,6 +241,13 @@ const PokemonSlotImpl: React.FC<PokemonSlotProps> = ({
                 // composited; let Chrome's own promotion heuristic decide
                 // when a slot deserves a layer.
                 //
+                // The `scale(var(--slot-scale, 1))` factor is part of the
+                // same transform string so hover/active scale composes inside
+                // a single matrix multiplication with the translate. Tailwind
+                // `hover:[--slot-scale:1.1]` re-defines the variable on hover;
+                // CSS `var()` resolution is dynamic, so the inline transform
+                // recomputes without React having to track hover state.
+                //
                 // `contain: layout paint` upgrades the slot's existing
                 // [contain:layout] Tailwind class with paint isolation too —
                 // each slot is its own layout AND paint root, so when the
@@ -236,7 +258,7 @@ const PokemonSlotImpl: React.FC<PokemonSlotProps> = ({
                 ...(absolutePosition !== undefined
                     ? {
                           position: 'absolute' as const,
-                          transform: `translate(${absolutePosition.x}px, ${absolutePosition.y}px)`,
+                          transform: `translate(${absolutePosition.x}px, ${absolutePosition.y}px) scale(var(--slot-scale, 1))`,
                           contain: 'layout paint',
                       }
                     : order !== undefined

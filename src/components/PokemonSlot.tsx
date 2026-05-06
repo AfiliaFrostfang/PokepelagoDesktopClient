@@ -33,11 +33,19 @@ interface PokemonSlotProps {
     isReleased: boolean;
     isPokegeared: boolean;
     isDerpified: boolean;
+    // PERF-12 (JS-driven slot positioning): when set, the slot renders as
+    // `position: absolute; transform: translate(x, y)` inside a positioned
+    // parent. Replaces the CSS-grid auto-fill placement: 150 slots per region
+    // skip the browser's grid auto-placement pass entirely. `order` is ignored
+    // in this mode — caller should pre-shuffle the input order. Opt-in via
+    // ?jsDexGrid=1 in DexGrid.
+    absolutePosition?: { x: number; y: number };
 }
 
 const PokemonSlotImpl: React.FC<PokemonSlotProps> = ({
     pokemon, status, isShiny = false, order,
     canGuess, reason, isReleased, isPokegeared, isDerpified,
+    absolutePosition,
 }) => {
     const { setSelectedPokemonId, acquireSlotSpriteUrl, releaseSlotSpriteUrl, peekSlotSpriteUrl, uiSettings, spriteRefreshCounter, pmdSpriteUrl, lang } = usePokemonSlotContext();
 
@@ -210,7 +218,30 @@ const PokemonSlotImpl: React.FC<PokemonSlotProps> = ({
             style={{
                 width: slotPx,
                 height: slotPx,
-                ...(order !== undefined ? { order } : {}),
+                // JS-driven layout (PERF-12): take the slot out of flow,
+                // position via composited transform. Trace 2026-05-06 showed
+                // willChange:transform across 1025 slots was net-negative —
+                // Chrome's compositor was allocating eager GPU layers and the
+                // layout pass still had to walk each slot. transform alone is
+                // composited; let Chrome's own promotion heuristic decide
+                // when a slot deserves a layer.
+                //
+                // `contain: layout paint` upgrades the slot's existing
+                // [contain:layout] Tailwind class with paint isolation too —
+                // each slot is its own layout AND paint root, so when the
+                // wrapper geometry changes Chrome can resolve each slot's
+                // contribution in isolation. Size containment is intentionally
+                // omitted (slots have explicit width/height inline; size
+                // would be redundant and we saw `contain: strict` regress).
+                ...(absolutePosition !== undefined
+                    ? {
+                          position: 'absolute' as const,
+                          transform: `translate(${absolutePosition.x}px, ${absolutePosition.y}px)`,
+                          contain: 'layout paint',
+                      }
+                    : order !== undefined
+                    ? { order }
+                    : {}),
             }}
             title={!canGuess ? reason : (isChecked ? cleanName : status === 'hint' ? `${cleanName} (Hinted)` : `#${pokemon.id}`)}
         >

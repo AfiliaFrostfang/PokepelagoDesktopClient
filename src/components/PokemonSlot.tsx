@@ -7,6 +7,7 @@ import pokemonNamesJson from '../data/pokemon_names.json';
 import { TYPE_COLORS } from '../utils/typeColors';
 import { PmdSpriteCanvas } from './PmdSpriteCanvas';
 import { normalizePmdBaseUrl } from '../services/pmdSpriteService';
+import { recordSlotMount, recordSlotRender, recordSpriteLoaded } from '../utils/perfHarness';
 
 interface PokemonSlotProps {
     pokemon: PokemonRef;
@@ -29,6 +30,10 @@ const PokemonSlotImpl: React.FC<PokemonSlotProps> = ({
     canGuess, reason, isReleased, isPokegeared, isDerpified,
 }) => {
     const { setSelectedPokemonId, acquireSlotSpriteUrl, releaseSlotSpriteUrl, peekSlotSpriteUrl, uiSettings, spriteRefreshCounter, pmdSpriteUrl } = usePokemonSlotContext();
+
+    // Perf harness counters (no-op when ?perf=1 is not set).
+    recordSlotRender();
+    React.useEffect(() => { recordSlotMount(pokemon.id); }, [pokemon.id]);
 
     // On (re)mount, hydrate from the cache synchronously if available so
     // toggling regions doesn't flash opacity-0 while the sprite re-resolves.
@@ -111,6 +116,15 @@ const PokemonSlotImpl: React.FC<PokemonSlotProps> = ({
             prevSpriteUrlRef.current = spriteUrl;
         }
     }, [spriteUrl]);
+
+    // Perf harness: report when this slot has reached a "settled" state for
+    // sprite loading (loaded, errored, or sprites disabled). Dedup by id is
+    // handled in the harness.
+    React.useEffect(() => {
+        if (!uiSettings.enableSprites || isLoaded || hasError) {
+            recordSpriteLoaded(pokemon.id);
+        }
+    }, [pokemon.id, uiSettings.enableSprites, isLoaded, hasError]);
 
     const isChecked = status === 'checked';
     const isVisible = isChecked || status === 'shadow' || status === 'hint';

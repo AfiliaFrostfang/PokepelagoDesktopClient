@@ -6,6 +6,7 @@ import { PokemonSlot } from './PokemonSlot';
 import { Lock, GripVertical, ChevronDown } from 'lucide-react';
 import pokemonMetadata from '../data/pokemon_metadata.json';
 import { SUB_LEGENDARY_IDS, BOX_LEGENDARY_IDS, MYTHIC_IDS, BABY_IDS, TRADE_EVO_IDS, FOSSIL_IDS, ULTRA_BEAST_IDS, PARADOX_IDS, STONE_EVO_IDS } from '../data/pokemon_gates';
+import { isPerfMode, markDexGridMount, setExpectedSlots } from '../utils/perfHarness';
 
 const REGION_LAYOUT_KEY = 'pokepelago_region_layout';
 
@@ -33,6 +34,14 @@ export const DexGrid: React.FC = () => {
     });
 
     const [regionOpen, setRegionOpen] = useState<Record<string, boolean>>(() => {
+        // Perf-mode override: force every region open so each run measures the
+        // same workload. Skips localStorage so prior collapsed regions don't
+        // skew the timing.
+        if (isPerfMode()) {
+            const all: Record<string, boolean> = {};
+            for (const g of GENERATIONS) all[g.label] = true;
+            return all;
+        }
         try {
             const saved = localStorage.getItem(REGION_LAYOUT_KEY);
             if (saved) return JSON.parse(saved).open ?? {};
@@ -41,8 +50,20 @@ export const DexGrid: React.FC = () => {
     });
 
     useEffect(() => {
+        // Don't persist perf-mode forced state.
+        if (isPerfMode()) return;
         localStorage.setItem(REGION_LAYOUT_KEY, JSON.stringify({ order: regionOrder, open: regionOpen }));
     }, [regionOrder, regionOpen]);
+
+    // Perf harness: mark DexGrid mount once, set expected slot count from the
+    // pokemon list so the harness can fire all-slots-mounted / all-sprites-loaded
+    // when the counters reach it.
+    useEffect(() => {
+        markDexGridMount();
+    }, []);
+    useEffect(() => {
+        if (allPokemon.length > 0) setExpectedSlots(allPokemon.length);
+    }, [allPokemon.length]);
 
     const toggleRegion = useCallback((label: string) => {
         setRegionOpen(prev => ({ ...prev, [label]: prev[label] === false }));

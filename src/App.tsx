@@ -231,10 +231,13 @@ const GameContent: React.FC = () => {
       </div>
 
       <div className="flex-1 flex overflow-hidden relative">
-        {/* Left Sidebar - Log (desktop only) */}
+        {/* Left Sidebar - Log (desktop only). Width transition removed to
+            avoid 300ms × 60fps of flex-wrap reflow on the 1025-slot dex grid
+            during open/close. Snap-toggle gives one layout pass instead of
+            ~18 frame-by-frame reflows. */}
         <aside
           className={`
-            hidden md:flex flex-col backdrop-blur-md transition-[width,transform] duration-300
+            hidden md:flex flex-col backdrop-blur-md
             relative
             ${isLogOpen ? 'w-80' : 'w-0 overflow-hidden border-none'}
           `}
@@ -258,10 +261,12 @@ const GameContent: React.FC = () => {
           </div>
         </main>
 
-        {/* Right Sidebar - Tracker / Settings / Twitch (desktop only) */}
+        {/* Right Sidebar - Tracker / Settings / Twitch (desktop only). Width
+            transition removed; same reasoning as left sidebar — snap-toggle to
+            avoid frame-by-frame flex-wrap reflow on the dex grid. */}
         <aside
           className={`
-            hidden md:flex flex-col backdrop-blur-md transition-[width,transform] duration-300
+            hidden md:flex flex-col backdrop-blur-md
             relative
             ${isSidebarOpen ? 'w-80' : 'w-0 overflow-hidden border-none'}
           `}

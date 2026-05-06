@@ -160,6 +160,11 @@ export const DexGrid: React.FC = () => {
 
     const activeCount = generationFilter.length;
 
+    // Slot pixel size. Hoisted from PokemonSlot so DexGrid can drive the
+    // grid track size on the slot wrap. Single source of truth shared by
+    // the wrapping container and the slots themselves.
+    const slotPx = 44 * uiSettings.spriteSize;
+
     const containerClass = uiSettings.masonry
         ? `columns-1 ${activeCount > 1 ? 'sm:columns-2' : ''} ${activeCount > 2 ? 'lg:columns-3' : ''} ${activeCount > 3 ? 'xl:columns-4' : ''} ${activeCount > 4 ? '2xl:columns-5' : ''} gap-3 sm:gap-4 px-1 sm:px-4 pb-32 space-y-3 sm:space-y-4`
         : `grid grid-cols-1 ${activeCount > 1 ? 'sm:grid-cols-2' : ''} ${activeCount > 2 ? 'lg:grid-cols-3' : ''} ${activeCount > 3 ? 'xl:grid-cols-4' : ''} ${activeCount > 4 ? '2xl:grid-cols-5' : ''} gap-3 sm:gap-4 px-1 sm:px-4 pb-32 items-start`;
@@ -376,13 +381,34 @@ export const DexGrid: React.FC = () => {
                             className="px-2 pb-3 sm:px-4 sm:pb-4"
                             style={{
                                 display: isRegionOpen ? undefined : 'none',
-                                // CSS containment: scope-limits within-body layout
-                                // even when open. Layered on top of the always-mounted
-                                // strategy.
                                 contain: 'layout',
+                                // content-visibility: auto skips rendering for
+                                // offscreen subtrees entirely. With ?perf=1 (or
+                                // a power user with many regions open), only the
+                                // 1-2 region bodies actually in viewport pay
+                                // layout cost. Browser uses contain-intrinsic-size
+                                // as the placeholder while skipping; 'auto' lets
+                                // it remember the last rendered size after the
+                                // first render. Combined with always-mounted +
+                                // display:none, this is effectively free
+                                // virtualization for the dex grid.
+                                contentVisibility: isRegionOpen ? 'auto' : undefined,
+                                containIntrinsicSize: 'auto 600px',
                             }}
                         >
-                            <div className="flex flex-wrap gap-1 sm:gap-1.5 justify-start">
+                            <div
+                                className="grid gap-1 sm:gap-1.5 justify-start"
+                                style={{
+                                    // Switch from flex flex-wrap to CSS Grid auto-fill.
+                                    // Grid auto-placement is faster than flex-wrap
+                                    // because the cell grid is precomputed: every cell
+                                    // is exactly slotPx, so children just drop into
+                                    // the next available cell. flex-wrap had to do
+                                    // intrinsic-size resolution per child to determine
+                                    // row breaks.
+                                    gridTemplateColumns: `repeat(auto-fill, ${slotPx}px)`,
+                                }}
+                            >
                                 {pokemonInGen.map(p => {
                                     // PERF-02: compute per-pokemon state here so PokemonSlot
                                     // can be a context-free consumer. Pokemon that don't

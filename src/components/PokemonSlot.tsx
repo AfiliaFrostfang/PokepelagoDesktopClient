@@ -189,14 +189,14 @@ const PokemonSlotImpl: React.FC<PokemonSlotProps> = ({
                 if (!uiSettings.persistentDot && isReadyToGuess && !hasHovered) setHasHovered(true);
             }}
             className={clsx(
-                // PERF-06: explicit transition-property list. transition-all
-                // forced the browser to recompute style for every animatable
-                // property of every slot on every change, attributing 51% of
-                // wall-clock to Rendering during region toggles. Only transform
-                // (hover scale) and box-shadow (hover ring) actually animate
-                // here -- state changes (border class swaps) are fine to be
-                // instant and previously weren't visibly transitioned anyway.
+                // PERF-06: explicit transition-property list (only transform
+                // and box-shadow animate here on hover).
                 'flex items-center justify-center transition-[transform,box-shadow] duration-300 relative group cursor-pointer border',
+                // Static styles moved from inline style obj to class — saves
+                // per-slot inline style application across 1025 elements.
+                // contain: layout scope-limits reflow within the slot.
+                // [contain:layout] is Tailwind arbitrary syntax.
+                '[contain:layout] [border-radius:var(--pp-slot-radius)]',
                 borderClass,
                 isReadyToGuess
                     ? 'hover:scale-110 hover:shadow-[0_0_14px_rgba(34,197,94,0.6)] active:scale-95'
@@ -206,14 +206,6 @@ const PokemonSlotImpl: React.FC<PokemonSlotProps> = ({
             style={{
                 width: slotPx,
                 height: slotPx,
-                borderRadius: 'var(--pp-slot-radius)',
-                // CSS containment: tells Blink this slot's layout doesn't
-                // affect siblings or the dex-grid container. Without this,
-                // every state/hover change on any slot can cascade a layout
-                // pass over all 1025 flex children. NOT 'paint' or 'content'
-                // because the tooltip uses bottom-full to render above the
-                // slot and would be clipped.
-                contain: 'layout',
                 ...(order !== undefined ? { order } : {}),
             }}
             title={!canGuess ? reason : (isChecked ? cleanName : status === 'hint' ? `${cleanName} (Hinted)` : `#${pokemon.id}`)}

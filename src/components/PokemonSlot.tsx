@@ -294,12 +294,11 @@ const PokemonSlotImpl: React.FC<PokemonSlotProps> = ({
                 <span className="text-gray-700" style={{ fontSize: 10 * uiSettings.spriteSize }}>●</span>
             )}
 
-            {/* Tooltip */}
-            {isChecked && (
-                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-1 bg-gray-900 text-xs text-white rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-20 pointer-events-none border border-gray-700 shadow-xl">
-                    {cleanName}
-                </div>
-            )}
+            {/* Tooltip removed: the outer div already has title={cleanName}
+                for checked slots, so the browser's native tooltip shows the
+                same name on hover. The custom styled tooltip was duplicate
+                DOM weight (one <div> per checked slot — hundreds in a played-
+                through dex) and added paint cost on every hover. */}
         </div>
     );
 };

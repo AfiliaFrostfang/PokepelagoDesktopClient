@@ -237,7 +237,7 @@ const GameContent: React.FC = () => {
             ~18 frame-by-frame reflows. */}
         <aside
           className={`
-            hidden md:flex flex-col backdrop-blur-md
+            hidden md:flex flex-col
             relative
             ${isLogOpen ? 'w-80' : 'w-0 overflow-hidden border-none'}
           `}
@@ -266,7 +266,7 @@ const GameContent: React.FC = () => {
             avoid frame-by-frame flex-wrap reflow on the dex grid. */}
         <aside
           className={`
-            hidden md:flex flex-col backdrop-blur-md
+            hidden md:flex flex-col
             relative
             ${isSidebarOpen ? 'w-80' : 'w-0 overflow-hidden border-none'}
           `}

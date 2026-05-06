@@ -306,7 +306,7 @@ export const DexGrid: React.FC = () => {
                         onDrop={() => handleDrop(gen.label)}
                         {...(genIndex === 0 ? { 'data-tour': 'dex-region' } : {})}
                         className={`
-                            border backdrop-blur-sm shadow-2xl flex flex-col h-fit
+                            border shadow-2xl flex flex-col h-fit
                             region-card-${regionSlug} region-bg-${regionSlug}
                             ${uiSettings.masonry ? 'break-inside-avoid mb-4' : ''}
                             w-full transition-all duration-150
@@ -382,18 +382,13 @@ export const DexGrid: React.FC = () => {
                             style={{
                                 display: isRegionOpen ? undefined : 'none',
                                 contain: 'layout',
-                                // content-visibility: auto skips rendering for
-                                // offscreen subtrees entirely. With ?perf=1 (or
-                                // a power user with many regions open), only the
-                                // 1-2 region bodies actually in viewport pay
-                                // layout cost. Browser uses contain-intrinsic-size
-                                // as the placeholder while skipping; 'auto' lets
-                                // it remember the last rendered size after the
-                                // first render. Combined with always-mounted +
-                                // display:none, this is effectively free
-                                // virtualization for the dex grid.
-                                contentVisibility: isRegionOpen ? 'auto' : undefined,
-                                containIntrinsicSize: 'auto 600px',
+                                // content-visibility: auto was tried 2026-05-06
+                                // (commit 2e1173b) and reverted: it added
+                                // intersection-check + on-demand-layout work to
+                                // every scroll event in our stacked-region
+                                // layout, which made scrolling perceptibly
+                                // janky and increased total Layout count from
+                                // 41 -> 102 events per session. Net negative.
                             }}
                         >
                             <div

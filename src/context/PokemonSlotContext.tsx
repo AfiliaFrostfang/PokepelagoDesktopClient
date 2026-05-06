@@ -25,6 +25,20 @@ import type { UISettings } from './GameContext';
 export interface PokemonSlotContextValue {
     uiSettings: UISettings;
     getSpriteUrl: (id: number, options?: { shiny?: boolean; animated?: boolean }) => Promise<string | null>;
+    // Cache-aware sprite URL acquire/release. PokemonSlot uses these instead of
+    // getSpriteUrl so sprites survive region toggle remounts without re-fetching
+    // from IDB and without an opacity-0 reload flicker. See spriteUrlCache.ts.
+    acquireSlotSpriteUrl: (
+        id: number,
+        options: { shiny?: boolean; animated?: boolean; derpyfied?: boolean },
+    ) => { key: string; promise: Promise<string | null> };
+    releaseSlotSpriteUrl: (key: string) => void;
+    // Synchronous peek for state initialization on remount: returns the
+    // already-resolved URL or null.
+    peekSlotSpriteUrl: (
+        id: number,
+        options: { shiny?: boolean; animated?: boolean; derpyfied?: boolean },
+    ) => string | null;
     spriteRefreshCounter: number;
     pmdSpriteUrl: string;
     setSelectedPokemonId: (id: number | null) => void;

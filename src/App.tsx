@@ -33,7 +33,16 @@ const GameContent: React.FC = () => {
     startingLocationsEnabled, gameStarted, connectionKey,
     pokemonLoadError, retryPokemonLoad,
     releasedIds,
+    generationFilter,
   } = useGame();
+
+  // Dex grid effective width: respect explicit widescreen toggle, and also
+  // auto-promote to full width when only one region is active or the user
+  // forced 1-column mode. Addresses Discord 2026-05-06 feedback that the
+  // single-region layout left huge empty space on wide monitors.
+  const useFullWidth = uiSettings.widescreen
+    || generationFilter.length === 1
+    || uiSettings.dexGridColumns === 1;
 
   const [adventureOverlayDismissed, setAdventureOverlayDismissed] = React.useState(false);
   // Reset on every new connection (covers both disconnect→reconnect and game-switching).
@@ -255,8 +264,8 @@ const GameContent: React.FC = () => {
         </aside>
 
         {/* Main Content */}
-        <main className={`flex-1 overflow-y-auto [scrollbar-gutter:stable] pb-20 md:pb-16 ${uiSettings.widescreen ? 'px-6' : 'px-1 sm:px-4'}`}>
-          <div className={`${uiSettings.widescreen ? 'max-w-none' : 'max-w-screen-xl'} mx-auto pt-2 md:pt-6`}>
+        <main className={`flex-1 overflow-y-auto [scrollbar-gutter:stable] pb-20 md:pb-16 ${useFullWidth ? 'px-6' : 'px-1 sm:px-4'}`}>
+          <div className={`${useFullWidth ? 'max-w-none' : 'max-w-screen-xl'} mx-auto pt-2 md:pt-6`}>
             <DexGrid />
           </div>
         </main>

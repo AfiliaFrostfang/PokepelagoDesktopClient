@@ -119,6 +119,10 @@ export interface UISettings {
     alwaysShowTypes: boolean;
     spriteSize: 1 | 1.25 | 1.5 | 1.75 | 2;
     silhouetteGlow: boolean;
+    // Manual override for dex-grid column count. 'auto' tracks the activeCount
+    // (existing behavior). A specific number overrides to that count, capped
+    // at activeCount so empty cells aren't rendered.
+    dexGridColumns: 'auto' | 1 | 2 | 3 | 4 | 5;
 }
 
 interface ConnectionInfo {
@@ -349,6 +353,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
             alwaysShowTypes: false,
             spriteSize: 1,
             silhouetteGlow: true,
+            dexGridColumns: 'auto',
         };
         if (saved) {
             try {

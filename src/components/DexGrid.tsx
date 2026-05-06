@@ -165,9 +165,25 @@ export const DexGrid: React.FC = () => {
     // the wrapping container and the slots themselves.
     const slotPx = 44 * uiSettings.spriteSize;
 
-    const containerClass = uiSettings.masonry
-        ? `columns-1 ${activeCount > 1 ? 'sm:columns-2' : ''} ${activeCount > 2 ? 'lg:columns-3' : ''} ${activeCount > 3 ? 'xl:columns-4' : ''} ${activeCount > 4 ? '2xl:columns-5' : ''} gap-3 sm:gap-4 px-1 sm:px-4 pb-32 space-y-3 sm:space-y-4`
-        : `grid grid-cols-1 ${activeCount > 1 ? 'sm:grid-cols-2' : ''} ${activeCount > 2 ? 'lg:grid-cols-3' : ''} ${activeCount > 3 ? 'xl:grid-cols-4' : ''} ${activeCount > 4 ? '2xl:grid-cols-5' : ''} gap-3 sm:gap-4 px-1 sm:px-4 pb-32 items-start`;
+    // Effective column count: 'auto' tracks activeCount (existing behavior);
+    // a manual override is capped at activeCount so we don't render empty
+    // cells. Discord 2026-05-06 feedback: with 1 active region the dex grid
+    // wasted horizontal space; this setting lets users force more / fewer
+    // columns regardless of how many regions they have on.
+    const effectiveColumns = uiSettings.dexGridColumns === 'auto'
+        ? Math.min(activeCount, 5)
+        : Math.min(uiSettings.dexGridColumns, activeCount);
+
+    // Build the responsive grid/columns class string from effectiveColumns.
+    // Uses the same breakpoint scheme as before so small screens still stack.
+    const colTokens = uiSettings.masonry
+        ? ['columns-1', 'sm:columns-2', 'lg:columns-3', 'xl:columns-4', '2xl:columns-5']
+        : ['grid-cols-1', 'sm:grid-cols-2', 'lg:grid-cols-3', 'xl:grid-cols-4', '2xl:grid-cols-5'];
+    const responsiveCols = colTokens.slice(0, effectiveColumns).join(' ');
+    const baseLayout = uiSettings.masonry
+        ? 'gap-3 sm:gap-4 px-1 sm:px-4 pb-32 space-y-3 sm:space-y-4'
+        : 'grid gap-3 sm:gap-4 px-1 sm:px-4 pb-32 items-start';
+    const containerClass = `${responsiveCols} ${baseLayout}`;
 
     const toggleDexFilter = (key: 'guessable' | 'guessed') => {
         setDexFilter(prev => {

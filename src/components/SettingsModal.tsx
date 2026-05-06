@@ -204,6 +204,32 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                                         </label>
                                         <label className="flex items-center justify-between p-3 bg-gray-800/30 border border-gray-700 rounded hover:bg-gray-800/50 transition-colors cursor-pointer group">
                                             <div className="flex items-center gap-2">
+                                                <LayoutGrid size={16} className="text-blue-400 group-hover:scale-110 transition-transform" />
+                                                <div>
+                                                    <div className="text-xs font-bold text-gray-200">Region Columns</div>
+                                                    <div className="text-[9px] text-gray-500">Override auto layout</div>
+                                                </div>
+                                            </div>
+                                            <select
+                                                value={uiSettings.dexGridColumns}
+                                                onChange={(e) => {
+                                                    const v = e.target.value;
+                                                    updateUiSettings({
+                                                        dexGridColumns: v === 'auto' ? 'auto' : (Number(v) as 1 | 2 | 3 | 4 | 5),
+                                                    });
+                                                }}
+                                                className="bg-gray-900 border border-gray-700 rounded text-xs text-gray-200 px-2 py-1 focus:ring-blue-500 focus:border-blue-500"
+                                            >
+                                                <option value="auto">Auto</option>
+                                                <option value="1">1</option>
+                                                <option value="2">2</option>
+                                                <option value="3">3</option>
+                                                <option value="4">4</option>
+                                                <option value="5">5</option>
+                                            </select>
+                                        </label>
+                                        <label className="flex items-center justify-between p-3 bg-gray-800/30 border border-gray-700 rounded hover:bg-gray-800/50 transition-colors cursor-pointer group">
+                                            <div className="flex items-center gap-2">
                                                 <LayoutGrid size={16} className="text-emerald-400 group-hover:scale-110 transition-transform" />
                                                 <div>
                                                     <div className="text-xs font-bold text-gray-200">Fit Regions</div>

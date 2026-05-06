@@ -189,9 +189,13 @@ const PokemonSlotImpl: React.FC<PokemonSlotProps> = ({
                 if (!uiSettings.persistentDot && isReadyToGuess && !hasHovered) setHasHovered(true);
             }}
             className={clsx(
-                // PERF-06: explicit transition-property list (only transform
-                // and box-shadow animate here on hover).
-                'flex items-center justify-center transition-[transform,box-shadow] duration-300 relative group cursor-pointer border',
+                // 2026-05-06: hover transition removed entirely. With 1025
+                // slots each carrying transform/box-shadow transition watchers,
+                // every paint frame the browser checks them all for changes.
+                // Snap-hover (instant scale + shadow on :hover) trades a tiny
+                // bit of visual polish for measurable style-recalc reduction
+                // during sidebar toggle / region toggle.
+                'flex items-center justify-center relative group cursor-pointer border',
                 // Static styles moved from inline style obj to class — saves
                 // per-slot inline style application across 1025 elements.
                 // contain: layout scope-limits reflow within the slot.

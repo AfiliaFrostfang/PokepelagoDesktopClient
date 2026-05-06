@@ -7,8 +7,171 @@ import { Lock, GripVertical, ChevronDown } from 'lucide-react';
 import pokemonMetadata from '../data/pokemon_metadata.json';
 import { SUB_LEGENDARY_IDS, BOX_LEGENDARY_IDS, MYTHIC_IDS, BABY_IDS, TRADE_EVO_IDS, FOSSIL_IDS, ULTRA_BEAST_IDS, PARADOX_IDS, STONE_EVO_IDS } from '../data/pokemon_gates';
 import { isPerfMode, markDexGridMount, setExpectedSlots } from '../utils/perfHarness';
+import { useSlotLayout, useInViewport } from '../hooks/useSlotLayout';
 
 const REGION_LAYOUT_KEY = 'pokepelago_region_layout';
+
+// PERF-12: JS-driven absolute slot positioning inside region bodies. Region
+// body slots render as `position: absolute; transform: translate(x, y)`
+// instead of CSS Grid auto-fill, skipping browser layout for ~150 children
+// per card. Region cards' outer layout (drag-drop, masonry, the cards-per-row
+// grid) stays in CSS — that's a cheap pass over ~5 elements. The legacy CSS-
+// grid path is preserved behind ?legacyDexGrid=1 as an escape hatch in case
+// the JS path regresses for someone in the wild; once 2-4 weeks of beta usage
+// confirm no issues, the legacy path can be deleted.
+//
+// Trace iteration log (2026-05-06): four traces against a representative
+// region/sidebar toggle session brought worst-case Layout from 489 ms (initial
+// JS layout, willChange:transform on slots) → 1266 ms (regression with
+// contain:strict on the wrapper — size-containment was breaking on dynamic
+// totalHeight) → 716 ms (revert to contain:layout, drop willChange, add
+// contain:layout paint per slot) → 383 ms (add IntersectionObserver per
+// region, only render visible-region slots). Avg Layout 158 → 112 ms; 51% of
+// Layouts now under 16 ms (single-frame). See
+// [[2026-05-06 — Plan — JS-Driven DexGrid Slot Positioning]] for original
+// design + the matching shipped plan note for what actually shipped.
+function isLegacyDexGridMode(): boolean {
+    if (typeof window === 'undefined') return false;
+    return new URLSearchParams(window.location.search).get('legacyDexGrid') === '1';
+}
+
+// Per-region slot grid. Two layout paths:
+//   - legacy: CSS Grid `auto-fill, ${slotPx}px`. The browser places each slot
+//     in the next available cell. Cost scales with slot count (~150 per card)
+//     and dominates per-Layout time during region/sidebar toggle.
+//   - JS-driven (?jsDexGrid=1): `position: relative; height: totalHeight`
+//     positioning parent; each slot is `position: absolute; transform: translate`.
+//     Slot positions come from useSlotLayout, which measures via ResizeObserver
+//     and recomputes O(N) on input change. Browser does no layout for slots —
+//     just paints them at known transforms. Hot-path win is the region toggle:
+//     show/hide a `display: none` parent costs ~zero layout instead of re-running
+//     auto-placement on 150 children.
+const RegionSlots: React.FC<{
+    pokemonInGen: PokemonRef[];
+    shuffleOrder: Map<number, number>;
+    slotPx: number;
+    statusFor: (id: number) => 'locked' | 'unlocked' | 'checked' | 'shadow' | 'hint';
+    canGuessFor: (id: number) => { canGuess: boolean; reason?: string };
+    shinyIds: Set<number>;
+    releasedIds: Set<number>;
+    usedPokegears: Set<number>;
+    derpyfiedIds: Set<number>;
+    jsLayout: boolean;
+}> = ({ pokemonInGen, shuffleOrder, slotPx, statusFor, canGuessFor, shinyIds, releasedIds, usedPokegears, derpyfiedIds, jsLayout }) => {
+    // Gap mirrors the legacy `gap-1 sm:gap-1.5` (4px / 6px at Tailwind's sm
+    // breakpoint = 640px). matchMedia listener keeps the JS layout in sync
+    // when the user resizes across the breakpoint; a static fallback value
+    // lets SSR / non-window environments pick the desktop default.
+    const [gap, setGap] = React.useState(() => {
+        if (typeof window === 'undefined') return 6;
+        return window.matchMedia('(min-width: 640px)').matches ? 6 : 4;
+    });
+    React.useEffect(() => {
+        if (typeof window === 'undefined') return;
+        const mq = window.matchMedia('(min-width: 640px)');
+        const onChange = () => setGap(mq.matches ? 6 : 4);
+        mq.addEventListener('change', onChange);
+        return () => mq.removeEventListener('change', onChange);
+    }, []);
+
+    // Pre-shuffle the order if shuffle is active. The CSS-grid path uses the
+    // `order` prop on each slot (also passed below); the JS-layout path needs
+    // a real reordering of the input array because positions are computed by
+    // index. Sorting by shuffleOrder gives the same visual result without
+    // relying on CSS `order`.
+    const orderedPokemon = React.useMemo(() => {
+        if (shuffleOrder.size === 0) return pokemonInGen;
+        return [...pokemonInGen].sort(
+            (a, b) => (shuffleOrder.get(a.id) ?? 0) - (shuffleOrder.get(b.id) ?? 0),
+        );
+    }, [pokemonInGen, shuffleOrder]);
+
+    const { ref, layout } = useSlotLayout(jsLayout ? orderedPokemon.length : 0, slotPx, gap);
+
+    // Per-region viewport gate (PERF-12 v2). Only render slot DOM nodes when
+    // the region is in viewport (with 600px overscan via useInViewport's
+    // default rootMargin). For an off-screen region, the wrapper still
+    // reserves its full height so scrolling stays correct, but no slots are
+    // mounted — Chrome's Layout pass therefore doesn't have to walk them.
+    // Sprite cache is refcounted (services/spriteUrlCache.ts) so unmounted
+    // slots' blob URLs survive remount with no opacity-0 reload flicker.
+    // Only applied in jsLayout mode; legacy CSS-grid path keeps every slot
+    // mounted for backwards-compat with the in-flight beta perf sweep.
+    const { ref: viewportRef, inViewport } = useInViewport<HTMLDivElement>();
+
+    const renderSlot = (p: PokemonRef, idx: number) => {
+        const { canGuess, reason } = canGuessFor(p.id);
+        const pos = jsLayout ? layout.positions[idx] : undefined;
+        return (
+            <PokemonSlot
+                key={p.id}
+                pokemon={p}
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                status={statusFor(p.id) as any}
+                isShiny={shinyIds.has(p.id)}
+                order={jsLayout ? undefined : shuffleOrder.get(p.id)}
+                canGuess={canGuess}
+                reason={reason}
+                isReleased={releasedIds.has(p.id)}
+                isPokegeared={usedPokegears.has(p.id)}
+                isDerpified={derpyfiedIds.has(p.id)}
+                absolutePosition={pos}
+            />
+        );
+    };
+
+    // Merge the two refs (ResizeObserver from useSlotLayout, IntersectionObserver
+    // from useInViewport) onto a single wrapper element via a callback ref.
+    const setWrapperRef = React.useCallback((el: HTMLDivElement | null) => {
+        ref.current = el;
+        viewportRef.current = el;
+    }, [ref, viewportRef]);
+
+    if (jsLayout) {
+        return (
+            <div
+                ref={setWrapperRef}
+                style={{
+                    position: 'relative',
+                    height: layout.totalHeight,
+                    // 2026-05-06 trace iteration: tried `contain: strict`
+                    // (size + layout + paint + style) and Chrome got WORSE —
+                    // worst Layout 489ms → 1266ms, one event with 923 dirty
+                    // objects. Theory: `contain: size` requires the box's
+                    // intrinsic size to be content-independent, but our
+                    // height = totalHeight is recomputed when the parent
+                    // width changes (sidebar toggle → ResizeObserver →
+                    // slotsPerRow recompute). Each height change invalidates
+                    // size containment, forcing Chrome to re-walk all 1025
+                    // absolute children. Plain `contain: layout` is a
+                    // narrower contract that doesn't fight the dynamic
+                    // height, and is what produced the first-trace baseline.
+                    contain: 'layout',
+                }}
+            >
+                {inViewport ? orderedPokemon.map(renderSlot) : null}
+            </div>
+        );
+    }
+
+    return (
+        <div
+            className="grid gap-1 sm:gap-1.5 justify-start"
+            style={{
+                // Switch from flex flex-wrap to CSS Grid auto-fill.
+                // Grid auto-placement is faster than flex-wrap
+                // because the cell grid is precomputed: every cell
+                // is exactly slotPx, so children just drop into
+                // the next available cell. flex-wrap had to do
+                // intrinsic-size resolution per child to determine
+                // row breaks.
+                gridTemplateColumns: `repeat(auto-fill, ${slotPx}px)`,
+            }}
+        >
+            {pokemonInGen.map((p, idx) => renderSlot(p, idx))}
+        </div>
+    );
+};
 
 export const DexGrid: React.FC = () => {
     const { allPokemon, unlockedIds, checkedIds, hintedIds, shinyIds, generationFilter, uiSettings, gameMode, isPokemonGuessable, shuffleEndTime, releasedIds, activeRegions, regionPasses, regionLocksEnabled, startingRegion, typeFilter, dexFilter, setDexFilter, categoryFilter, usedPokegears, usedPokedexes, derpyfiedIds } = useGame();
@@ -195,6 +358,13 @@ export const DexGrid: React.FC = () => {
 
     const guessableCount = allPokemon.filter(p => !checkedIds.has(p.id) && isPokemonGuessable(p.id).canGuess).length;
     const guessedCount = allPokemon.filter(p => checkedIds.has(p.id) && !releasedIds.has(p.id)).length;
+
+    // PERF-12: JS-driven absolute slot positioning is the default. The
+    // ?legacyDexGrid=1 query param is the escape hatch back to the previous
+    // CSS Grid auto-fill path. Computed once per render (cheap;
+    // URLSearchParams is fast). Could be hoisted to module scope, but keeping
+    // it here lets dev hot-reload pick up flag changes without a full reload.
+    const jsLayout = !isLegacyDexGridMode();
 
     return (
         <div className="flex flex-col">
@@ -407,42 +577,18 @@ export const DexGrid: React.FC = () => {
                                 // 41 -> 102 events per session. Net negative.
                             }}
                         >
-                            <div
-                                className="grid gap-1 sm:gap-1.5 justify-start"
-                                style={{
-                                    // Switch from flex flex-wrap to CSS Grid auto-fill.
-                                    // Grid auto-placement is faster than flex-wrap
-                                    // because the cell grid is precomputed: every cell
-                                    // is exactly slotPx, so children just drop into
-                                    // the next available cell. flex-wrap had to do
-                                    // intrinsic-size resolution per child to determine
-                                    // row breaks.
-                                    gridTemplateColumns: `repeat(auto-fill, ${slotPx}px)`,
-                                }}
-                            >
-                                {pokemonInGen.map(p => {
-                                    // PERF-02: compute per-pokemon state here so PokemonSlot
-                                    // can be a context-free consumer. Pokemon that don't
-                                    // change between renders skip React.memo thanks to
-                                    // primitive-only props + PokemonSlotContext narrowing.
-                                    const { canGuess, reason } = isPokemonGuessable(p.id);
-                                    return (
-                                        <PokemonSlot
-                                            key={p.id}
-                                            pokemon={p}
-                                            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                                            status={getStatus(p.id) as any}
-                                            isShiny={shinyIds.has(p.id)}
-                                            order={shuffleOrder.get(p.id)}
-                                            canGuess={canGuess}
-                                            reason={reason}
-                                            isReleased={releasedIds.has(p.id)}
-                                            isPokegeared={usedPokegears.has(p.id)}
-                                            isDerpified={derpyfiedIds.has(p.id)}
-                                        />
-                                    );
-                                })}
-                            </div>
+                            <RegionSlots
+                                pokemonInGen={pokemonInGen}
+                                shuffleOrder={shuffleOrder}
+                                slotPx={slotPx}
+                                statusFor={getStatus}
+                                canGuessFor={isPokemonGuessable}
+                                shinyIds={shinyIds}
+                                releasedIds={releasedIds}
+                                usedPokegears={usedPokegears}
+                                derpyfiedIds={derpyfiedIds}
+                                jsLayout={jsLayout}
+                            />
                         </div>
                     </div>
                 );

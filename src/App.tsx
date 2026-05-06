@@ -231,21 +231,17 @@ const GameContent: React.FC = () => {
       </div>
 
       <div className="flex-1 flex overflow-hidden relative">
-        {/* Left Sidebar - Log (desktop only). Option B (2026-05-06): sidebar
-            is positioned absolute and animated via translateX, so the main
-            content keeps full width regardless of sidebar state. The dex
-            grid no longer reflows on sidebar toggle (the previous biggest
-            interaction-lag source). UX trade: sidebar overlays main when
-            open instead of pushing it (Slack/Discord pattern). transform
-            animation runs on GPU so the 300ms transition is essentially free.
-            z-30 sits above main content, below modal overlays. */}
+        {/* Left Sidebar - Log (desktop only). Width transition removed to
+            avoid 300ms × 60fps of flex-wrap reflow on the 1025-slot dex grid
+            during open/close. Snap-toggle gives one layout pass instead of
+            ~18 frame-by-frame reflows. */}
         <aside
           className={`
-            hidden md:flex flex-col absolute top-0 bottom-0 left-0 z-30 w-80
-            transition-transform duration-300 will-change-transform
-            ${isLogOpen ? 'translate-x-0' : '-translate-x-full'}
+            hidden md:flex flex-col
+            relative
+            ${isLogOpen ? 'w-80' : 'w-0 overflow-hidden border-none'}
           `}
-          style={{ backgroundColor: 'var(--pp-sidebar-bg)', borderRight: '1px solid var(--pp-border)' }}
+          style={{ backgroundColor: 'var(--pp-sidebar-bg)', borderRight: isLogOpen ? '1px solid var(--pp-border)' : 'none' }}
         >
           <div className="flex items-center justify-between px-4 py-3 shrink-0" style={{ borderBottom: '1px solid var(--pp-border)' }}>
             <span className="text-xs font-bold uppercase tracking-wider flex items-center gap-2" style={{ color: 'var(--pp-text-secondary)' }}>
@@ -265,17 +261,16 @@ const GameContent: React.FC = () => {
           </div>
         </main>
 
-        {/* Right Sidebar - Tracker / Settings / Twitch (desktop only). Same
-            Option B treatment as the left sidebar — overlays main via
-            translateX. Main width never changes, dex grid never reflows
-            on sidebar toggle. */}
+        {/* Right Sidebar - Tracker / Settings / Twitch (desktop only). Width
+            transition removed; same reasoning as left sidebar — snap-toggle to
+            avoid frame-by-frame flex-wrap reflow on the dex grid. */}
         <aside
           className={`
-            hidden md:flex flex-col absolute top-0 bottom-0 right-0 z-30 w-80
-            transition-transform duration-300 will-change-transform
-            ${isSidebarOpen ? 'translate-x-0' : 'translate-x-full'}
+            hidden md:flex flex-col
+            relative
+            ${isSidebarOpen ? 'w-80' : 'w-0 overflow-hidden border-none'}
           `}
-          style={{ backgroundColor: 'var(--pp-sidebar-bg)', borderLeft: '1px solid var(--pp-border)' }}
+          style={{ backgroundColor: 'var(--pp-sidebar-bg)', borderLeft: isSidebarOpen ? '1px solid var(--pp-border)' : 'none' }}
         >
           {/* Tabs */}
           <div className="flex shrink-0" style={{ borderBottom: '1px solid var(--pp-border)' }}>

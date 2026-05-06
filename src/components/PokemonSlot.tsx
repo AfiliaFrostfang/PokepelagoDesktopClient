@@ -203,7 +203,19 @@ const PokemonSlotImpl: React.FC<PokemonSlotProps> = ({
                     : 'hover:scale-105 active:scale-95',
                 isShiny && isChecked && 'shadow-[0_0_10px_rgba(255,215,0,0.4)]',
             )}
-            style={{ width: slotPx, height: slotPx, borderRadius: 'var(--pp-slot-radius)', ...(order !== undefined ? { order } : {}) }}
+            style={{
+                width: slotPx,
+                height: slotPx,
+                borderRadius: 'var(--pp-slot-radius)',
+                // CSS containment: tells Blink this slot's layout doesn't
+                // affect siblings or the dex-grid container. Without this,
+                // every state/hover change on any slot can cascade a layout
+                // pass over all 1025 flex children. NOT 'paint' or 'content'
+                // because the tooltip uses bottom-full to render above the
+                // slot and would be clipped.
+                contain: 'layout',
+                ...(order !== undefined ? { order } : {}),
+            }}
             title={!canGuess ? reason : (isChecked ? cleanName : status === 'hint' ? `${cleanName} (Hinted)` : `#${pokemon.id}`)}
         >
             {isVisible && normalizedPmdUrl && !pmdError && (

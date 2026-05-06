@@ -366,7 +366,18 @@ export const DexGrid: React.FC = () => {
                             already caches in IDB, the always-mounted tradeoff is no longer
                             worth the DOM weight. */}
                         {isRegionOpen && (
-                            <div className="px-2 pb-3 sm:px-4 sm:pb-4">
+                            <div
+                                className="px-2 pb-3 sm:px-4 sm:pb-4"
+                                style={{
+                                    // CSS containment: a region body's layout stays
+                                    // inside its own card. Toggling, hovering inside,
+                                    // or remounting slots in this region no longer
+                                    // forces the dex-grid container or sibling regions
+                                    // to re-flow. Trace 2026-05-06 showed Layout at
+                                    // 444ms avg per click; this scope-limits that.
+                                    contain: 'layout',
+                                }}
+                            >
                                 <div className="flex flex-wrap gap-1 sm:gap-1.5 justify-start">
                                     {pokemonInGen.map(p => {
                                         // PERF-02: compute per-pokemon state here so PokemonSlot

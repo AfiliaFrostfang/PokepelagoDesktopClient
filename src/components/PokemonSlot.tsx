@@ -189,7 +189,14 @@ const PokemonSlotImpl: React.FC<PokemonSlotProps> = ({
                 if (!uiSettings.persistentDot && isReadyToGuess && !hasHovered) setHasHovered(true);
             }}
             className={clsx(
-                'flex items-center justify-center transition-all duration-300 relative group cursor-pointer border',
+                // PERF-06: explicit transition-property list. transition-all
+                // forced the browser to recompute style for every animatable
+                // property of every slot on every change, attributing 51% of
+                // wall-clock to Rendering during region toggles. Only transform
+                // (hover scale) and box-shadow (hover ring) actually animate
+                // here -- state changes (border class swaps) are fine to be
+                // instant and previously weren't visibly transitioned anyway.
+                'flex items-center justify-center transition-[transform,box-shadow] duration-300 relative group cursor-pointer border',
                 borderClass,
                 isReadyToGuess
                     ? 'hover:scale-110 hover:shadow-[0_0_14px_rgba(34,197,94,0.6)] active:scale-95'
@@ -226,7 +233,11 @@ const PokemonSlotImpl: React.FC<PokemonSlotProps> = ({
                         onLoad={() => setIsLoaded(true)}
                         onError={() => setHasError(true)}
                         className={clsx(
-                            'object-contain z-10 transition-all duration-300',
+                            // PERF-06: only opacity actually animates on the
+                            // <img> (load fade-in). transition-all here
+                            // multiplied the style-recalc cost by 1025 across
+                            // the grid for no visual benefit.
+                            'object-contain z-10 transition-opacity duration-300',
                             isLoaded ? 'opacity-100' : 'opacity-0',
                         )}
                         style={{

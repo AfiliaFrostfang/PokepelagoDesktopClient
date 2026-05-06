@@ -28,10 +28,15 @@ const PokemonSlotImpl: React.FC<PokemonSlotProps> = ({
     pokemon, status, isShiny = false, order,
     canGuess, reason, isReleased, isPokegeared, isDerpified,
 }) => {
-    const { setSelectedPokemonId, getSpriteUrl, uiSettings, spriteRefreshCounter, pmdSpriteUrl } = usePokemonSlotContext();
+    const { setSelectedPokemonId, acquireSlotSpriteUrl, releaseSlotSpriteUrl, peekSlotSpriteUrl, uiSettings, spriteRefreshCounter, pmdSpriteUrl } = usePokemonSlotContext();
 
-    const [spriteUrl, setSpriteUrl] = React.useState<string | null>(null);
-    const [isLoaded, setIsLoaded] = React.useState(false);
+    // On (re)mount, hydrate from the cache synchronously if available so
+    // toggling regions doesn't flash opacity-0 while the sprite re-resolves.
+    // Lazy initializer so the peek runs once per mount, not per render.
+    const [spriteUrl, setSpriteUrl] = React.useState<string | null>(
+        () => peekSlotSpriteUrl(pokemon.id, { shiny: isShiny, derpyfied: isDerpified })
+    );
+    const [isLoaded, setIsLoaded] = React.useState(() => spriteUrl !== null);
     const [hasError, setHasError] = React.useState(false);
     const [hasHovered, setHasHovered] = React.useState(false);
 
@@ -61,41 +66,50 @@ const PokemonSlotImpl: React.FC<PokemonSlotProps> = ({
         setPlayingAttack(false);
     }, [normalizedPmdUrl]);
 
-    // Load sprite. Cleanup does NOT null spriteUrl -- the <img> keeps rendering
-    // the old (possibly just-revoked) blob URL until the next effect resolves,
-    // which eliminates the blank flash on every re-run.
+    // Load sprite via the shared refcounted cache (services/spriteUrlCache.ts).
+    // Acquire on mount + release on unmount: blob URLs survive remount, so
+    // toggling a region (which unmounts every PokemonSlot in it via PERF-03)
+    // no longer triggers a 150-blob revoke/recreate burst with the visible
+    // opacity-0 flicker that Discord users were reporting. The cache is
+    // evicted explicitly when spriteRefreshCounter changes (sprite-set toggle,
+    // disconnect, debug refresh, shuffle trap).
     React.useEffect(() => {
-        let active = true;
-        let createdUrl: string | null = null;
-        const loadSprite = async () => {
-            if (!uiSettings.enableSprites) {
-                if (active) {
-                    setSpriteUrl(null);
-                    setHasError(true);
-                }
-                return;
-            }
+        if (!uiSettings.enableSprites) {
+            setSpriteUrl(null);
+            setHasError(true);
+            return;
+        }
 
-            const url = await getSpriteUrl(pokemon.id, { shiny: isShiny });
+        let active = true;
+        const { key, promise } = acquireSlotSpriteUrl(pokemon.id, {
+            shiny: isShiny,
+            derpyfied: isDerpified,
+        });
+        promise.then((url) => {
             if (active) {
-                createdUrl = url;
                 setSpriteUrl(url);
                 if (!url) setHasError(true);
-            } else if (url && url.startsWith('blob:')) {
-                URL.revokeObjectURL(url);
             }
-        };
-        loadSprite();
+        }).catch(() => {
+            if (active) setHasError(true);
+        });
         return () => {
             active = false;
-            if (createdUrl && createdUrl.startsWith('blob:')) URL.revokeObjectURL(createdUrl);
+            releaseSlotSpriteUrl(key);
         };
-    }, [pokemon.id, isShiny, getSpriteUrl, uiSettings.enableSprites, spriteRefreshCounter, isDerpified]);
+    }, [pokemon.id, isShiny, isDerpified, acquireSlotSpriteUrl, releaseSlotSpriteUrl, uiSettings.enableSprites, spriteRefreshCounter]);
 
-    // Reset load state when url changes
+    // Reset load state when the URL actually changes (e.g. derp flip swaps to
+    // a different blob). Skip the first run so a cache-hydrated mount doesn't
+    // clobber its own isLoaded=true initial state and re-introduce the
+    // opacity-0 flash we just removed.
+    const prevSpriteUrlRef = React.useRef(spriteUrl);
     React.useEffect(() => {
-        setIsLoaded(false);
-        setHasError(false);
+        if (prevSpriteUrlRef.current !== spriteUrl) {
+            setIsLoaded(false);
+            setHasError(false);
+            prevSpriteUrlRef.current = spriteUrl;
+        }
     }, [spriteUrl]);
 
     const isChecked = status === 'checked';

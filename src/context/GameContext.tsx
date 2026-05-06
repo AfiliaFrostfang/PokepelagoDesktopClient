@@ -455,7 +455,8 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
         spriteRepoUrl, setSpriteRepoUrl,
         pmdSpriteUrl, setPmdSpriteUrl,
         refreshSpriteCount, getSpriteUrl,
-    } = useSpriteManager({ uiSettings, derpyfiedIds, derpemonIndex });
+        acquireSlotSpriteUrl, releaseSlotSpriteUrl, peekSlotSpriteUrl,
+    } = useSpriteManager({ uiSettings, derpyfiedIds, derpemonIndex, spriteRefreshCounter });
 
     // ── Goal Checker Hook ────────────────────────────────────────────────────────
     useGoalChecker({
@@ -1773,10 +1774,13 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const pokemonSlotContextValue = useMemo<PokemonSlotContextValue>(() => ({
         uiSettings,
         getSpriteUrl,
+        acquireSlotSpriteUrl,
+        releaseSlotSpriteUrl,
+        peekSlotSpriteUrl,
         spriteRefreshCounter,
         pmdSpriteUrl,
         setSelectedPokemonId,
-    }), [uiSettings, getSpriteUrl, spriteRefreshCounter, pmdSpriteUrl]);
+    }), [uiSettings, getSpriteUrl, acquireSlotSpriteUrl, releaseSlotSpriteUrl, peekSlotSpriteUrl, spriteRefreshCounter, pmdSpriteUrl]);
 
     return (
         <GameContext.Provider value={{

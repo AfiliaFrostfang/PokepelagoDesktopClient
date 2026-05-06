@@ -20,6 +20,7 @@ import { TourPrompt } from './components/TourPrompt';
 import { useTour } from './hooks/useTour';
 import type { TourMode } from './hooks/useTour';
 import { TwitchProvider } from './context/TwitchContext';
+import { SpriteDebugOverlay } from './components/SpriteDebugOverlay';
 
 const isOverlayMode = new URLSearchParams(window.location.search).has('overlay');
 
@@ -424,6 +425,7 @@ const App: React.FC = () => {
           {isOverlayMode ? <OverlayView /> : <GameContent />}
         </TwitchProvider>
       </GameProvider>
+      <SpriteDebugOverlay />
     </ErrorBoundary>
   );
 };

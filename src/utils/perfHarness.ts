@@ -27,6 +27,15 @@ let totalRenderCount = 0;
 let bootHeap = 0;
 let peakHeap = 0;
 
+// Long-task + INP tracking. PerformanceObserver entries arrive
+// asynchronously; we accumulate counters and notify the overlay via emit().
+let longTaskCount = 0;
+let longTaskTotalMs = 0;
+let longestTaskMs = 0;
+let lastInpMs = 0;        // most recent interaction's input-to-next-paint
+let worstInpMs = 0;       // session high-water mark
+let observersStarted = false;
+
 const subscribers = new Set<() => void>();
 
 function emit() {
@@ -43,7 +52,48 @@ export function markBoot(): void {
     bootTime = performance.now();
     bootHeap = readHeap();
     peakHeap = bootHeap;
+    startObservers();
     emit();
+}
+
+function startObservers(): void {
+    if (observersStarted) return;
+    observersStarted = true;
+    if (typeof PerformanceObserver === 'undefined') return;
+
+    // Long-task observer: any main-thread block >= 50 ms shows up here.
+    // entryTypes 'longtask' is supported in Chrome and Edge; Firefox doesn't
+    // implement it, so this counter stays at 0 there.
+    try {
+        const longTaskObserver = new PerformanceObserver((list) => {
+            for (const entry of list.getEntries()) {
+                longTaskCount++;
+                longTaskTotalMs += entry.duration;
+                if (entry.duration > longestTaskMs) longestTaskMs = entry.duration;
+            }
+            emit();
+        });
+        longTaskObserver.observe({ type: 'longtask', buffered: true });
+    } catch { /* not supported, no-op */ }
+
+    // Event-timing observer for INP (interaction-to-next-paint). Only
+    // entries with a non-zero interactionId are user-driven interactions
+    // (clicks, keypresses, taps). durationThreshold filters out the cheap ones.
+    try {
+        const eventObserver = new PerformanceObserver((list) => {
+            for (const entry of list.getEntries()) {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                const e = entry as any;
+                if (typeof e.interactionId === 'number' && e.interactionId !== 0) {
+                    lastInpMs = e.duration;
+                    if (e.duration > worstInpMs) worstInpMs = e.duration;
+                }
+            }
+            emit();
+        });
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        eventObserver.observe({ type: 'event', buffered: true, durationThreshold: 16 } as any);
+    } catch { /* not supported, no-op */ }
 }
 
 export function markDexGridMount(): void {
@@ -130,6 +180,11 @@ export interface PerfStats {
     loadedSlotCount: number;
     bootHeapMb: number;
     peakHeapMb: number;
+    longTaskCount: number;          // main-thread blocks >= 50 ms
+    longTaskTotalMs: number;
+    longestTaskMs: number;
+    lastInpMs: number;              // most recent interaction's INP
+    worstInpMs: number;             // session high-water mark
 }
 
 export function getPerfStats(): PerfStats {
@@ -144,6 +199,11 @@ export function getPerfStats(): PerfStats {
         loadedSlotCount: loadedSlotIds.size,
         bootHeapMb: bootHeap / 1024 / 1024,
         peakHeapMb: peakHeap / 1024 / 1024,
+        longTaskCount,
+        longTaskTotalMs,
+        longestTaskMs,
+        lastInpMs,
+        worstInpMs,
     };
 }
 
@@ -164,4 +224,9 @@ export function _resetPerfHarness(): void {
     totalRenderCount = 0;
     bootHeap = 0;
     peakHeap = 0;
+    longTaskCount = 0;
+    longTaskTotalMs = 0;
+    longestTaskMs = 0;
+    lastInpMs = 0;
+    worstInpMs = 0;
 }

@@ -61,6 +61,18 @@ export const PerfOverlay: React.FC = () => {
             <div style={{ color: '#fbbf24' }}>
                 heap peak: {fmtMb(stats.peakHeapMb)}
             </div>
+            <div style={{ marginTop: 4, color: '#fb923c' }}>
+                long tasks: {stats.longTaskCount} ({stats.longTaskTotalMs.toFixed(0)} ms total)
+            </div>
+            <div style={{ color: '#fb923c' }}>
+                longest task: {stats.longestTaskMs > 0 ? `${stats.longestTaskMs.toFixed(0)} ms` : '—'}
+            </div>
+            <div style={{ marginTop: 4, color: '#f87171' }}>
+                INP last: {stats.lastInpMs > 0 ? `${stats.lastInpMs.toFixed(0)} ms` : '—'}
+            </div>
+            <div style={{ color: '#f87171' }}>
+                INP worst: {stats.worstInpMs > 0 ? `${stats.worstInpMs.toFixed(0)} ms` : '—'}
+            </div>
         </div>
     );
 };

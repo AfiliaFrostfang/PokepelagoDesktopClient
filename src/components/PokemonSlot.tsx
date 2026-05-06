@@ -222,7 +222,6 @@ const PokemonSlotImpl: React.FC<PokemonSlotProps> = ({
                     <img
                         src={spriteUrl}
                         alt={isChecked ? pokemon.name : `Pokemon #${pokemon.id}`}
-                        loading="lazy"
                         decoding="async"
                         onLoad={() => setIsLoaded(true)}
                         onError={() => setHasError(true)}

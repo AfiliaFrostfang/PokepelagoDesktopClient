@@ -54,6 +54,10 @@ export const GlobalGuessInput: React.FC = () => {
     const handleSelectLanguage = (code: LanguageCode) => {
         setSelectedLanguage(code);
         localStorage.setItem('pokepelago_language', code);
+        // Notify hoisted-lang consumers (PokemonSlotContext) so the dex grid
+        // re-renders with the new language without each slot polling
+        // localStorage on every render.
+        window.dispatchEvent(new Event('pokepelago_language_changed'));
         setLangMenuOpen(false);
     };
 

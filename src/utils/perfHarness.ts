@@ -58,6 +58,17 @@ export function markDexGridMount(): void {
 export function setExpectedSlots(n: number): void {
     if (!isPerfMode()) return;
     expectedSlotCount = n;
+    // Slots may have already mounted before the expected count was provided
+    // (DexGrid pushes the count from a useEffect that fires after the slot
+    // useEffects). Fire the sentinels here too so the markers don't stay at —.
+    if (mountedSlotIds.size >= n && allSlotsMountedTime === 0) {
+        allSlotsMountedTime = performance.now();
+        samplePeakHeap();
+    }
+    if (loadedSlotIds.size >= n && allSpritesLoadedTime === 0) {
+        allSpritesLoadedTime = performance.now();
+        samplePeakHeap();
+    }
     emit();
 }
 

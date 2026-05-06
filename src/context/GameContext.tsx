@@ -458,6 +458,20 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
         acquireSlotSpriteUrl, releaseSlotSpriteUrl, peekSlotSpriteUrl,
     } = useSpriteManager({ uiSettings, derpyfiedIds, derpemonIndex, spriteRefreshCounter });
 
+    // Language hoist: read once + listen for the custom event GlobalGuessInput
+    // dispatches when the user changes language. Replaces 1025 per-render
+    // localStorage.getItem calls in PokemonSlot.
+    const [lang, setLang] = useState<string>(() => localStorage.getItem('pokepelago_language') ?? 'en');
+    useEffect(() => {
+        const handler = () => setLang(localStorage.getItem('pokepelago_language') ?? 'en');
+        window.addEventListener('pokepelago_language_changed', handler);
+        window.addEventListener('storage', handler);
+        return () => {
+            window.removeEventListener('pokepelago_language_changed', handler);
+            window.removeEventListener('storage', handler);
+        };
+    }, []);
+
     // ── Goal Checker Hook ────────────────────────────────────────────────────────
     useGoalChecker({
         clientRef, offsetsRef, isNewApWorldRef,
@@ -1780,7 +1794,8 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
         spriteRefreshCounter,
         pmdSpriteUrl,
         setSelectedPokemonId,
-    }), [uiSettings, getSpriteUrl, acquireSlotSpriteUrl, releaseSlotSpriteUrl, peekSlotSpriteUrl, spriteRefreshCounter, pmdSpriteUrl]);
+        lang,
+    }), [uiSettings, getSpriteUrl, acquireSlotSpriteUrl, releaseSlotSpriteUrl, peekSlotSpriteUrl, spriteRefreshCounter, pmdSpriteUrl, lang]);
 
     return (
         <GameContext.Provider value={{

@@ -237,29 +237,28 @@ const PokemonSlotImpl: React.FC<PokemonSlotProps> = ({
             )}
 
             {isVisible && !normalizedPmdUrl && !hasError && spriteUrl && (
-                <div className="absolute inset-0 flex items-center justify-center overflow-hidden pointer-events-none">
-                    <img
-                        src={spriteUrl}
-                        alt={isChecked ? pokemon.name : `Pokemon #${pokemon.id}`}
-                        decoding="async"
-                        onLoad={() => setIsLoaded(true)}
-                        onError={() => setHasError(true)}
-                        className={clsx(
-                            // PERF-06: only opacity actually animates on the
-                            // <img> (load fade-in). transition-all here
-                            // multiplied the style-recalc cost by 1025 across
-                            // the grid for no visual benefit.
-                            'object-contain z-10 transition-opacity duration-300',
-                            isLoaded ? 'opacity-100' : 'opacity-0',
-                        )}
-                        style={{
-                            imageRendering: 'pixelated',
-                            width: slotPx,
-                            height: slotPx,
-                            ...(silhouetteFilter ? { filter: silhouetteFilter, opacity: isLoaded ? silhouetteOpacity : 0 } : {}),
-                        }}
-                    />
-                </div>
+                // DOM consolidation 2026-05-06: merged a wrapper <div> into the
+                // <img>. The wrapper existed for centering, but the img is
+                // exactly slot-sized via inline width/height, so centering was
+                // a no-op. Saves one DOM node per visible slot — ~1000 nodes
+                // for a fully-checked dex.
+                <img
+                    src={spriteUrl}
+                    alt={isChecked ? pokemon.name : `Pokemon #${pokemon.id}`}
+                    decoding="async"
+                    onLoad={() => setIsLoaded(true)}
+                    onError={() => setHasError(true)}
+                    className={clsx(
+                        'absolute inset-0 object-contain z-10 pointer-events-none transition-opacity duration-300',
+                        isLoaded ? 'opacity-100' : 'opacity-0',
+                    )}
+                    style={{
+                        imageRendering: 'pixelated',
+                        width: slotPx,
+                        height: slotPx,
+                        ...(silhouetteFilter ? { filter: silhouetteFilter, opacity: isLoaded ? silhouetteOpacity : 0 } : {}),
+                    }}
+                />
             )}
 
             {uiSettings.showDexNumbers && (() => {
@@ -276,18 +275,23 @@ const PokemonSlotImpl: React.FC<PokemonSlotProps> = ({
                 );
             })()}
 
-            {/* Shiny sparkle indicator */}
+            {/* Shiny sparkle indicator (single span — wrapper div removed) */}
             {isShiny && isChecked && (
-                <div className="absolute top-0.5 right-0.5 z-20 animate-pulse">
-                    <span className="leading-none drop-shadow-[0_0_2px_rgba(255,215,0,0.8)]" style={{ fontSize: 10 * uiSettings.spriteSize }}>✨</span>
-                </div>
+                <span
+                    className="absolute top-0.5 right-0.5 z-20 animate-pulse leading-none drop-shadow-[0_0_2px_rgba(255,215,0,0.8)]"
+                    style={{ fontSize: 10 * uiSettings.spriteSize }}
+                >✨</span>
             )}
 
-            {/* Guessable indicator — type-colored dot; persistent or notification-style */}
+            {/* Guessable indicator — type-colored dot. Wrapper div removed: it
+                conditionally renders/unrenders on hasHovered toggle (no fade
+                between states), so the previous transition-opacity was dead. */}
             {isReadyToGuess && (uiSettings.persistentDot || !hasHovered) && (
-                <div className="absolute top-0.5 right-0.5 z-20 transition-opacity duration-300" title={typeTitle}>
-                    <span className="block rounded-full" style={{ ...typeDotStyle, width: 6 * uiSettings.spriteSize, height: 6 * uiSettings.spriteSize }} />
-                </div>
+                <span
+                    className="absolute top-0.5 right-0.5 z-20 block rounded-full"
+                    title={typeTitle}
+                    style={{ ...typeDotStyle, width: 6 * uiSettings.spriteSize, height: 6 * uiSettings.spriteSize }}
+                />
             )}
 
             {status === 'unlocked' && (

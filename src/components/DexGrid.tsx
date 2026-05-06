@@ -99,9 +99,8 @@ const RegionSlots: React.FC<{
     // mounted for backwards-compat with the in-flight beta perf sweep.
     const { ref: viewportRef, inViewport } = useInViewport<HTMLDivElement>();
 
-    const renderSlot = (p: PokemonRef, idx: number) => {
+    const renderSlot = (p: PokemonRef) => {
         const { canGuess, reason } = canGuessFor(p.id);
-        const pos = jsLayout ? layout.positions[idx] : undefined;
         return (
             <PokemonSlot
                 key={p.id}
@@ -109,13 +108,12 @@ const RegionSlots: React.FC<{
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 status={statusFor(p.id) as any}
                 isShiny={shinyIds.has(p.id)}
-                order={jsLayout ? undefined : shuffleOrder.get(p.id)}
+                order={shuffleOrder.get(p.id)}
                 canGuess={canGuess}
                 reason={reason}
                 isReleased={releasedIds.has(p.id)}
                 isPokegeared={usedPokegears.has(p.id)}
                 isDerpified={derpyfiedIds.has(p.id)}
-                absolutePosition={pos}
             />
         );
     };
@@ -128,25 +126,28 @@ const RegionSlots: React.FC<{
     }, [ref, viewportRef]);
 
     if (jsLayout) {
+        // BUG-15 (2026-05-06): the original PERF-12 design positioned slots
+        // via `position: absolute; transform: translate(x, y)` inside a
+        // `position: relative; contain: layout` wrapper. Firefox's
+        // hit-testing for those abs children was broken — getBoundingClientRect
+        // reported the correct rect but elementFromPoint at the slot center
+        // returned the wrapper, so lower-row slots became unclickable. Fixed
+        // by reverting to the same CSS Grid auto-fill placement the legacy
+        // path uses; slots are now normal grid items, hit-tested correctly.
+        // We KEEP the per-region IntersectionObserver virtualization gate
+        // (off-screen regions skip rendering all 150 slot DOM nodes), and
+        // keep `useSlotLayout` only for the off-screen height reservation
+        // so scroll position survives a region scrolling out of viewport.
         return (
             <div
                 ref={setWrapperRef}
+                className="grid gap-1 sm:gap-1.5 justify-start"
                 style={{
-                    position: 'relative',
-                    height: layout.totalHeight,
-                    // 2026-05-06 trace iteration: tried `contain: strict`
-                    // (size + layout + paint + style) and Chrome got WORSE —
-                    // worst Layout 489ms → 1266ms, one event with 923 dirty
-                    // objects. Theory: `contain: size` requires the box's
-                    // intrinsic size to be content-independent, but our
-                    // height = totalHeight is recomputed when the parent
-                    // width changes (sidebar toggle → ResizeObserver →
-                    // slotsPerRow recompute). Each height change invalidates
-                    // size containment, forcing Chrome to re-walk all 1025
-                    // absolute children. Plain `contain: layout` is a
-                    // narrower contract that doesn't fight the dynamic
-                    // height, and is what produced the first-trace baseline.
-                    contain: 'layout',
+                    gridTemplateColumns: `repeat(auto-fill, ${slotPx}px)`,
+                    // Reserve height when slots aren't rendered (off-screen
+                    // virtualization). When `inViewport`, the grid auto-sizes
+                    // to its rendered children and minHeight becomes a no-op.
+                    minHeight: inViewport ? undefined : layout.totalHeight,
                 }}
             >
                 {inViewport ? orderedPokemon.map(renderSlot) : null}
@@ -168,7 +169,7 @@ const RegionSlots: React.FC<{
                 gridTemplateColumns: `repeat(auto-fill, ${slotPx}px)`,
             }}
         >
-            {pokemonInGen.map((p, idx) => renderSlot(p, idx))}
+            {pokemonInGen.map(renderSlot)}
         </div>
     );
 };

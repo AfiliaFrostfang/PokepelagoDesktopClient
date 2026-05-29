@@ -55,7 +55,7 @@ jobs:
           path: apworld-repo
 
       - name: Remove files excluded by .apignore
-        run: rm -rf apworld-repo/worlds/pokepelago/test apworld-repo/worlds/pokepelago/__pycache__ apworld-repo/worlds/pokepelago/_dev
+        run: rm -rf apworld-repo/worlds/pokepelago/test apworld-repo/worlds/pokepelago/__pycache__ apworld-repo/worlds/pokepelago/_dev apworld-repo/worlds/pokepelago/tools
 
       - name: Build .apworld
         id: apworld

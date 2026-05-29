@@ -20,7 +20,7 @@ jobs:
       - name: Checkout APWorld repo
         uses: actions/checkout@v4
         with:
-          repository: dowlle/ArchipelagoPokepelago
+          repository: dowlle/AppieArchipelago
           path: apworld-repo
 
       - name: Verify versions match tag
@@ -51,7 +51,7 @@ jobs:
       - name: Checkout APWorld repo
         uses: actions/checkout@v4
         with:
-          repository: dowlle/ArchipelagoPokepelago
+          repository: dowlle/AppieArchipelago
           path: apworld-repo
 
       - name: Remove files excluded by .apignore

@@ -144,7 +144,7 @@ export const SplashScreen: React.FC = () => {
                         <Github size={12} />
                         <span>Poképelago Client Repo</span>
                     </a>
-                    <a href="https://github.com/dowlle/ArchipelagoPokepelago" target="_blank" rel="noreferrer" className="flex items-center gap-2 hover:text-white transition-colors">
+                    <a href="https://github.com/dowlle/AppieArchipelago" target="_blank" rel="noreferrer" className="flex items-center gap-2 hover:text-white transition-colors">
                         <Github size={12} />
                         <span>Pokepelago Archipelago Repo</span>
                     </a>

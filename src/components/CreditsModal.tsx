@@ -13,6 +13,36 @@ const changelog: Array<{
     highlights: Array<{ label: string; text: string }>;
 }> = [
         {
+            version: '0.6.2',
+            date: 'May 2026',
+            highlights: [
+                {
+                    label: 'Pokémon classification fixes',
+                    text: 'Several Pokémon were missing from their lock categories and could be guessed too early. Type: Null, Silvally, Cosmog, Cosmoem, Ogerpon and the Loyal Three are now gated as legendaries; Poipole and Naganadel as Ultra Beasts; Toxel behind the Daycare; Aromatisse and Slurpuff behind the Link Cable. Phione is now treated as a mythical. Every category was audited against PokéAPI so this should not drift again.',
+                },
+                {
+                    label: 'Badge gating matches the server',
+                    text: 'Cross-generation evolutions (Magnezone, Electivire, Perrserker and friends) now show the same badge requirement the host enforces, so the client and Universal Tracker agree about what is in logic. The client reads the requirement straight from the seed instead of recomputing it.',
+                },
+                {
+                    label: 'Sprite and grid performance overhaul',
+                    text: 'Sprites no longer disappear when you collapse and re-open a region, off-screen regions are skipped while scrolling, and catching one Pokémon no longer redraws the whole grid. Interaction lag on large dexes is greatly reduced.',
+                },
+                {
+                    label: 'Stop auto-submit after goal',
+                    text: 'New setting (Interface, Gameplay) to stop auto-submitting guesses once you reach your goal, so you can keep browsing the dex without firing checks. Seeds can set the default; you can still override it.',
+                },
+                {
+                    label: 'Pokédex / Pokegear as filler',
+                    text: 'New YAML option to classify Pokédex and Pokegear as filler items instead of useful, so they stop crowding the useful-item pool. Master Ball is unaffected.',
+                },
+                {
+                    label: 'Template and housekeeping',
+                    text: 'The generated YAML template is now plain ASCII, fixing the WordPad save warning. Dependency cleanup clears all known security advisories.',
+                },
+            ],
+        },
+        {
             version: '0.6.1',
             date: 'April 2026',
             highlights: [

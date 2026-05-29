@@ -326,6 +326,26 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                                     </div>
                                 </div>
 
+                                {/* Gameplay */}
+                                <div className="space-y-2 pt-2">
+                                    <label className="flex items-center gap-2 text-xs font-bold text-gray-300">
+                                        <div className="w-3.5 h-3.5 rounded-full bg-yellow-900 border border-yellow-700 opacity-70" />
+                                        Gameplay
+                                    </label>
+                                    <div className="grid gap-3 grid-cols-2">
+                                        <label className="flex items-center justify-between p-3 bg-gray-800/30 border border-gray-700 rounded hover:bg-gray-800/50 transition-colors cursor-pointer group">
+                                            <div className="flex items-center gap-2">
+                                                <div className="w-4 h-4 rounded-full bg-yellow-900 border border-yellow-700 opacity-60 group-hover:scale-110 transition-transform" />
+                                                <div>
+                                                    <div className="text-xs font-bold text-gray-200">Stop Auto-submit After Goal</div>
+                                                    <div className="text-[9px] text-gray-500">Once your goal is reached, only submit on Enter (no auto-submit)</div>
+                                                </div>
+                                            </div>
+                                            <input type="checkbox" checked={uiSettings.stopAutosubmitOnGoal} onChange={(e) => updateUiSettings({ stopAutosubmitOnGoal: e.target.checked })} className="w-4 h-4 rounded border-gray-700 bg-gray-900 text-yellow-600 focus:ring-yellow-500" />
+                                        </label>
+                                    </div>
+                                </div>
+
                                 {__TWITCH_ENABLED__ && (
                                     <div className="space-y-2 pt-2">
                                         <label className="flex items-center gap-2 text-xs font-bold text-gray-300">

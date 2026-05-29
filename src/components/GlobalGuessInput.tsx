@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useGame } from '../context/GameContext';
 import { useTwitch } from '../context/TwitchContext';
 import { getCleanName } from '../utils/pokemon';
@@ -8,7 +8,7 @@ import { useTwitchChat } from '../hooks/useTwitchChat';
 import { PokeLogo } from './PokeLogo';
 
 export const GlobalGuessInput: React.FC = () => {
-    const { allPokemon, checkedIds, isPokemonGuessable, activePokemonLimit, releasedIds, toast, showToast, STARTER_OFFSET, MILESTONE_OFFSET, goalCount, gameMode } = useGame();
+    const { allPokemon, checkedIds, isPokemonGuessable, activePokemonLimit, releasedIds, toast, showToast, STARTER_OFFSET, MILESTONE_OFFSET, goalCount, gameMode, uiSettings } = useGame();
     const { addGuess } = useTwitch();
     const [guess, setGuess] = useState('');
     const inputRef = useRef<HTMLInputElement>(null);
@@ -130,12 +130,25 @@ export const GlobalGuessInput: React.FC = () => {
         };
     }, [allPokemon]);
 
+    // FEAT-03: once the goal is met, optionally stop auto-submitting so the player can keep
+    // typing/browsing without firing checks. Manual Enter (handleSubmit) still works.
+    const isGoalMet = useMemo(() => {
+        const guessedCount = Array.from(checkedIds).filter(id =>
+            id >= 1 && id <= 1025 &&
+            !(id >= STARTER_OFFSET && id < STARTER_OFFSET + 20) &&
+            id < MILESTONE_OFFSET &&
+            !releasedIds.has(id)
+        ).length;
+        return guessedCount >= (goalCount ?? activePokemonLimit);
+    }, [checkedIds, releasedIds, goalCount, activePokemonLimit, STARTER_OFFSET, MILESTONE_OFFSET]);
+
     // Auto-submit logic with smart debounce: submit instantly when the match is unambiguous,
     // only debounce (250ms) when the input could be the start of a longer uncaught Pokemon name
     // (e.g., "Hypno" while typing "Hypnomade"). This keeps the game feeling snappy for 95%+ of guesses.
     useEffect(() => {
         const normalised = guess.toLowerCase().trim();
         if (normalised.length < 3) return;
+        if (uiSettings.stopAutosubmitOnGoal && isGoalMet) return;  // FEAT-03
 
         // Find match eagerly to decide debounce delay
         const match = allPokemon.find(p => {
@@ -174,7 +187,7 @@ export const GlobalGuessInput: React.FC = () => {
         }, couldBePrefix ? 250 : 0);
 
         return () => clearTimeout(timer);
-    }, [guess, allPokemon, checkedIds, isPokemonGuessable, releasedIds, matchesPokemon, attemptGuess, showToast, addGuess]);
+    }, [guess, allPokemon, checkedIds, isPokemonGuessable, releasedIds, matchesPokemon, attemptGuess, showToast, addGuess, uiSettings.stopAutosubmitOnGoal, isGoalMet]);
 
     const handleManualGuess = (name: string) => {
         const result = attemptGuess(name);

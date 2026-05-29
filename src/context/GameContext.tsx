@@ -119,6 +119,10 @@ export interface UISettings {
     alwaysShowTypes: boolean;
     spriteSize: 1 | 1.25 | 1.5 | 1.75 | 2;
     silhouetteGlow: boolean;
+    // FEAT-03: once the goal is reached, stop auto-submitting guesses (manual Enter only).
+    // Defaulted from the seed's stop_autosubmit_on_goal slot_data option on connect; the
+    // player can still toggle it locally.
+    stopAutosubmitOnGoal: boolean;
     // Manual override for dex-grid column count. 'auto' tracks the activeCount
     // (existing behavior). A specific number overrides to that count, capped
     // at activeCount so empty cells aren't rendered.
@@ -353,6 +357,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
             alwaysShowTypes: false,
             spriteSize: 1,
             silhouetteGlow: true,
+            stopAutosubmitOnGoal: false,
             dexGridColumns: 'auto',
         };
         if (saved) {
@@ -1223,6 +1228,10 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setLineLocksEnabled(!!slotData.line_locks);
         setBadgeLevelGatingEnabled(!!slotData.badge_level_gating);
         setMasterBallBypassGates(slotData.master_ball_bypass_gates !== false);
+        // FEAT-03: pre-fill the client toggle from the seed's option (player can override).
+        if (slotData.stop_autosubmit_on_goal !== undefined) {
+            setUiSettings(s => ({ ...s, stopAutosubmitOnGoal: !!slotData.stop_autosubmit_on_goal }));
+        }
         setStartingStarter(slotData.starting_starter ?? null);
 
         if (slotData.active_regions !== undefined) {

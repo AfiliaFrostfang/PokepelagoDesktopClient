@@ -30,6 +30,31 @@ function safeSetItem(key: string, value: string): void {
     catch { console.warn(`[localStorage] Failed to write key "${key}" (quota exceeded?)`); }
 }
 
+// PERF-07: coalesce high-frequency persistence writes (e.g. the caught set, which used to
+// write on every single guess — 100+ writes/min during rapid play) into at most one write
+// per key per `delay`. The latest value always wins. flushPendingWrites() forces all pending
+// writes immediately and is wired to pagehide so progress is never lost on tab close
+// (critical for standalone mode, where localStorage is the source of truth).
+const _writeTimers: Record<string, ReturnType<typeof setTimeout>> = {};
+const _pendingWrites: Record<string, string> = {};
+function debouncedSetItem(key: string, value: string, delay = 1000): void {
+    _pendingWrites[key] = value;
+    if (_writeTimers[key]) clearTimeout(_writeTimers[key]);
+    _writeTimers[key] = setTimeout(() => {
+        safeSetItem(key, _pendingWrites[key]);
+        delete _pendingWrites[key];
+        delete _writeTimers[key];
+    }, delay);
+}
+function flushPendingWrites(): void {
+    for (const key of Object.keys(_pendingWrites)) {
+        clearTimeout(_writeTimers[key]);
+        safeSetItem(key, _pendingWrites[key]);
+        delete _pendingWrites[key];
+        delete _writeTimers[key];
+    }
+}
+
 export interface LogEntry {
     id: string;
     timestamp: number;
@@ -519,18 +544,30 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     useEffect(() => {
         if (gameMode !== 'standalone') return;
         if (checkedIds.size === 0) return;
-        safeSetItem('pokepelago_standalone_caught', JSON.stringify(Array.from(checkedIds)));
+        debouncedSetItem('pokepelago_standalone_caught', JSON.stringify(Array.from(checkedIds)));  // PERF-07
     }, [checkedIds, gameMode]);
 
     // Save caught Pokémon locally for dexsanity=OFF AP games
     useEffect(() => {
         if (gameMode !== 'archipelago' || dexsanityEnabled || !connectedTeamSlot) return;
         const { team, slot } = connectedTeamSlot;
-        safeSetItem(
+        debouncedSetItem(  // PERF-07
             `pokepelago_team_${team}_slot_${slot}_caught_local`,
             JSON.stringify(Array.from(checkedIds))
         );
     }, [checkedIds, gameMode, dexsanityEnabled, connectedTeamSlot]);
+
+    // PERF-07: flush any debounced writes on tab hide/close so progress is never lost.
+    useEffect(() => {
+        const flush = () => flushPendingWrites();
+        window.addEventListener('pagehide', flush);
+        window.addEventListener('beforeunload', flush);
+        return () => {
+            window.removeEventListener('pagehide', flush);
+            window.removeEventListener('beforeunload', flush);
+            flushPendingWrites();
+        };
+    }, []);
 
     useEffect(() => {
         safeSetItem('pokepelago_ui', JSON.stringify(uiSettings));

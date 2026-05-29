@@ -38,7 +38,7 @@ const changelog: Array<{
                 },
                 {
                     label: 'Template and housekeeping',
-                    text: 'The generated YAML template is now plain ASCII, fixing the WordPad save warning. Dependency cleanup clears all known security advisories.',
+                    text: 'The generated YAML template is now plain ASCII. Non-ASCII characters risked breaking seed generation if the file was re-saved in a different encoding (which also tripped a WordPad save warning). Dependency cleanup clears all known security advisories.',
                 },
             ],
         },

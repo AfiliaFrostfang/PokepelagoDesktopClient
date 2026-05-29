@@ -8,11 +8,8 @@ import pokemonMetadata from '../data/pokemon_metadata.json';
 import { getCleanName } from '../utils/pokemon';
 import { updateProfile } from '../services/connectionManagerService';
 import { loadDerpemonIndex, type DerpemonIndex } from '../services/derpemonService';
-import {
-    SUB_LEGENDARY_IDS, BOX_LEGENDARY_IDS, MYTHIC_IDS,
-    BABY_IDS, TRADE_EVO_IDS, FOSSIL_IDS, ULTRA_BEAST_IDS, PARADOX_IDS,
-    STONE_EVO_IDS, STONE_NAMES_ORDERED,
-} from '../data/pokemon_gates';
+import { STONE_NAMES_ORDERED } from '../data/pokemon_gates';
+import { buildEffectiveGates, type ServerGateCategories } from '../data/gateCategories';
 import { getRouteKeysForPokemon, getLineUnlockForPokemon, getBadgeRequirement, ROUTE_KEY_ITEMS, ROUTE_INFO, ROUTE_POKEMON } from '../data/routeData';
 import { decodeRouteKey, decodeLineUnlock, decodeTypeKey, decodeRegionPass } from '../data/itemDecoding';
 import type { OffsetTable } from '../hooks/useOffsets';
@@ -321,6 +318,8 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Legacy APWorlds pre-dating the APWorld agent's slot_data change report null,
     // so the UI falls back to "unknown" or hides the version badge.
     const [apWorldServerVersion, setApWorldServerVersion] = useState<string | null>(null);
+    // DEVEX-15: gate classification sent by the server (null for legacy seeds → fallback).
+    const [serverGateCategories, setServerGateCategories] = useState<ServerGateCategories | null>(null);
     const [currentProfileId, setCurrentProfileId] = useState<string | null>(null);
     const [typeFilter, setTypeFilter] = useState<string[]>([]);
     const [dexFilter, setDexFilter] = useState<Set<'guessable' | 'guessed'>>(new Set());
@@ -837,6 +836,11 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return result;
     }, [checkedIds, slotMilestones, slotTypeMilestones, routeLocksEnabled, routeKeys, activeRegions]);
 
+    // DEVEX-15: effective gate sets — from the server's slot_data when present, else the
+    // legacy (pre-0.6.2) fallback. Stable identity (only rebuilds when the payload changes)
+    // so it can sit cleanly in the gating callback's dependency array.
+    const gates = useMemo(() => buildEffectiveGates(serverGateCategories), [serverGateCategories]);
+
     const isPokemonGuessableImpl = useCallback((id: number) => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const data = (pokemonMetadata as any)[id];
@@ -914,7 +918,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 badgeReq = getBadgeRequirement(id);
             }
             if (legendaryLocksEnabled) {
-                const legendaryReq = MYTHIC_IDS.has(id) ? 8 : BOX_LEGENDARY_IDS.has(id) ? 7 : SUB_LEGENDARY_IDS.has(id) ? 6 : 0;
+                const legendaryReq = gates.mythic.has(id) ? 8 : gates.boxLegendary.has(id) ? 7 : gates.subLegendary.has(id) ? 6 : 0;
                 badgeReq = Math.max(badgeReq, legendaryReq);
             }
             if (badgeReq > 0 && gymBadges < badgeReq) {
@@ -923,18 +927,18 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
             }
         }
 
-        if (tradeLocksEnabled && TRADE_EVO_IDS.has(id) && !hasLinkCable)
+        if (tradeLocksEnabled && gates.tradeEvo.has(id) && !hasLinkCable)
             gateReasons.push('Link Cable');
-        if (babyLocksEnabled && BABY_IDS.has(id) && daycareCount < daycareRequired)
+        if (babyLocksEnabled && gates.baby.has(id) && daycareCount < daycareRequired)
             gateReasons.push(`Daycare: ${daycareCount}/${daycareRequired}`);
-        if (fossilLocksEnabled && FOSSIL_IDS.has(id) && !hasFossilRestorer)
+        if (fossilLocksEnabled && gates.fossil.has(id) && !hasFossilRestorer)
             gateReasons.push('Fossil Restorer');
-        if (ultraBeastLocksEnabled && ULTRA_BEAST_IDS.has(id) && !hasUltraWormhole)
+        if (ultraBeastLocksEnabled && gates.ultraBeast.has(id) && !hasUltraWormhole)
             gateReasons.push('Ultra Wormhole');
-        if (paradoxLocksEnabled && PARADOX_IDS.has(id) && !hasTimeRift)
+        if (paradoxLocksEnabled && gates.paradox.has(id) && !hasTimeRift)
             gateReasons.push('Time Rift');
         if (stoneLocksEnabled) {
-            for (const [stone, ids] of Object.entries(STONE_EVO_IDS)) {
+            for (const [stone, ids] of Object.entries(gates.stoneEvo)) {
                 if (ids.has(id) && !unlockedStones.has(stone))
                     gateReasons.push(`Need ${stone.charAt(0).toUpperCase()}${stone.slice(1)} Stone`);
             }
@@ -962,7 +966,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
         badgeLevelGatingEnabled, legendaryLocksEnabled, gymBadges, tradeLocksEnabled, hasLinkCable,
         babyLocksEnabled, daycareCount, daycareRequired, fossilLocksEnabled, hasFossilRestorer,
         ultraBeastLocksEnabled, hasUltraWormhole, paradoxLocksEnabled, hasTimeRift,
-        stoneLocksEnabled, unlockedStones]);
+        stoneLocksEnabled, unlockedStones, gates]);
 
     // PERF-05: wrap isPokemonGuessable in a per-id memo cache. The inner function has 28 deps
     // and ran ~1025 times per DexGrid render. Cache invalidates whenever any dep to the inner
@@ -1029,6 +1033,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setSlotTypeMilestones(undefined);
         setDetectedApWorldVersion('unknown');
         setApWorldServerVersion(null);
+        setServerGateCategories(null);
         setGoal(undefined);
         setGoalCount(undefined);
 
@@ -1269,6 +1274,8 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (slotData.stop_autosubmit_on_goal !== undefined) {
             setUiSettings(s => ({ ...s, stopAutosubmitOnGoal: !!slotData.stop_autosubmit_on_goal }));
         }
+        // DEVEX-15: gate the way the generating server did. Absent (legacy seed) → fallback.
+        setServerGateCategories(slotData.gate_categories ?? null);
         setStartingStarter(slotData.starting_starter ?? null);
 
         if (slotData.active_regions !== undefined) {

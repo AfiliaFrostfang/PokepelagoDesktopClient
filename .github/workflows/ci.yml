@@ -32,4 +32,7 @@ jobs:
         run: npm run test:run
 
       - name: Audit dependencies
-        run: npm audit --audit-level=high
+        # Audit only shipped (production) deps. The static build bundles no
+        # devDependencies, so build-tool advisories (e.g. esbuild via vite) never
+        # reach users. Run a full `npm audit` manually when bumping build tooling.
+        run: npm audit --omit=dev --audit-level=high

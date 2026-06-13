@@ -6,8 +6,173 @@ import { PokemonSlot } from './PokemonSlot';
 import { Lock, GripVertical, ChevronDown } from 'lucide-react';
 import pokemonMetadata from '../data/pokemon_metadata.json';
 import { SUB_LEGENDARY_IDS, BOX_LEGENDARY_IDS, MYTHIC_IDS, BABY_IDS, TRADE_EVO_IDS, FOSSIL_IDS, ULTRA_BEAST_IDS, PARADOX_IDS, STONE_EVO_IDS } from '../data/pokemon_gates';
+import { isPerfMode, markDexGridMount, setExpectedSlots } from '../utils/perfHarness';
+import { useSlotLayout, useInViewport } from '../hooks/useSlotLayout';
 
 const REGION_LAYOUT_KEY = 'pokepelago_region_layout';
+
+// PERF-12: JS-driven absolute slot positioning inside region bodies. Region
+// body slots render as `position: absolute; transform: translate(x, y)`
+// instead of CSS Grid auto-fill, skipping browser layout for ~150 children
+// per card. Region cards' outer layout (drag-drop, masonry, the cards-per-row
+// grid) stays in CSS — that's a cheap pass over ~5 elements. The legacy CSS-
+// grid path is preserved behind ?legacyDexGrid=1 as an escape hatch in case
+// the JS path regresses for someone in the wild; once 2-4 weeks of beta usage
+// confirm no issues, the legacy path can be deleted.
+//
+// Trace iteration log (2026-05-06): four traces against a representative
+// region/sidebar toggle session brought worst-case Layout from 489 ms (initial
+// JS layout, willChange:transform on slots) → 1266 ms (regression with
+// contain:strict on the wrapper — size-containment was breaking on dynamic
+// totalHeight) → 716 ms (revert to contain:layout, drop willChange, add
+// contain:layout paint per slot) → 383 ms (add IntersectionObserver per
+// region, only render visible-region slots). Avg Layout 158 → 112 ms; 51% of
+// Layouts now under 16 ms (single-frame). See
+// [[2026-05-06 — Plan — JS-Driven DexGrid Slot Positioning]] for original
+// design + the matching shipped plan note for what actually shipped.
+function isLegacyDexGridMode(): boolean {
+    if (typeof window === 'undefined') return false;
+    return new URLSearchParams(window.location.search).get('legacyDexGrid') === '1';
+}
+
+// Per-region slot grid. Two layout paths:
+//   - legacy: CSS Grid `auto-fill, ${slotPx}px`. The browser places each slot
+//     in the next available cell. Cost scales with slot count (~150 per card)
+//     and dominates per-Layout time during region/sidebar toggle.
+//   - JS-driven (?jsDexGrid=1): `position: relative; height: totalHeight`
+//     positioning parent; each slot is `position: absolute; transform: translate`.
+//     Slot positions come from useSlotLayout, which measures via ResizeObserver
+//     and recomputes O(N) on input change. Browser does no layout for slots —
+//     just paints them at known transforms. Hot-path win is the region toggle:
+//     show/hide a `display: none` parent costs ~zero layout instead of re-running
+//     auto-placement on 150 children.
+const RegionSlots: React.FC<{
+    pokemonInGen: PokemonRef[];
+    shuffleOrder: Map<number, number>;
+    slotPx: number;
+    statusFor: (id: number) => 'locked' | 'unlocked' | 'checked' | 'shadow' | 'hint';
+    canGuessFor: (id: number) => { canGuess: boolean; reason?: string };
+    shinyIds: Set<number>;
+    releasedIds: Set<number>;
+    usedPokegears: Set<number>;
+    derpyfiedIds: Set<number>;
+    jsLayout: boolean;
+}> = ({ pokemonInGen, shuffleOrder, slotPx, statusFor, canGuessFor, shinyIds, releasedIds, usedPokegears, derpyfiedIds, jsLayout }) => {
+    // Gap mirrors the legacy `gap-1 sm:gap-1.5` (4px / 6px at Tailwind's sm
+    // breakpoint = 640px). matchMedia listener keeps the JS layout in sync
+    // when the user resizes across the breakpoint; a static fallback value
+    // lets SSR / non-window environments pick the desktop default.
+    const [gap, setGap] = React.useState(() => {
+        if (typeof window === 'undefined') return 6;
+        return window.matchMedia('(min-width: 640px)').matches ? 6 : 4;
+    });
+    React.useEffect(() => {
+        if (typeof window === 'undefined') return;
+        const mq = window.matchMedia('(min-width: 640px)');
+        const onChange = () => setGap(mq.matches ? 6 : 4);
+        mq.addEventListener('change', onChange);
+        return () => mq.removeEventListener('change', onChange);
+    }, []);
+
+    // Pre-shuffle the order if shuffle is active. The CSS-grid path uses the
+    // `order` prop on each slot (also passed below); the JS-layout path needs
+    // a real reordering of the input array because positions are computed by
+    // index. Sorting by shuffleOrder gives the same visual result without
+    // relying on CSS `order`.
+    const orderedPokemon = React.useMemo(() => {
+        if (shuffleOrder.size === 0) return pokemonInGen;
+        return [...pokemonInGen].sort(
+            (a, b) => (shuffleOrder.get(a.id) ?? 0) - (shuffleOrder.get(b.id) ?? 0),
+        );
+    }, [pokemonInGen, shuffleOrder]);
+
+    const { ref, layout } = useSlotLayout(jsLayout ? orderedPokemon.length : 0, slotPx, gap);
+
+    // Per-region viewport gate (PERF-12 v2). Only render slot DOM nodes when
+    // the region is in viewport (with 600px overscan via useInViewport's
+    // default rootMargin). For an off-screen region, the wrapper still
+    // reserves its full height so scrolling stays correct, but no slots are
+    // mounted — Chrome's Layout pass therefore doesn't have to walk them.
+    // Sprite cache is refcounted (services/spriteUrlCache.ts) so unmounted
+    // slots' blob URLs survive remount with no opacity-0 reload flicker.
+    // Only applied in jsLayout mode; legacy CSS-grid path keeps every slot
+    // mounted for backwards-compat with the in-flight beta perf sweep.
+    const { ref: viewportRef, inViewport } = useInViewport<HTMLDivElement>();
+
+    const renderSlot = (p: PokemonRef) => {
+        const { canGuess, reason } = canGuessFor(p.id);
+        return (
+            <PokemonSlot
+                key={p.id}
+                pokemon={p}
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                status={statusFor(p.id) as any}
+                isShiny={shinyIds.has(p.id)}
+                order={shuffleOrder.get(p.id)}
+                canGuess={canGuess}
+                reason={reason}
+                isReleased={releasedIds.has(p.id)}
+                isPokegeared={usedPokegears.has(p.id)}
+                isDerpified={derpyfiedIds.has(p.id)}
+            />
+        );
+    };
+
+    // Merge the two refs (ResizeObserver from useSlotLayout, IntersectionObserver
+    // from useInViewport) onto a single wrapper element via a callback ref.
+    const setWrapperRef = React.useCallback((el: HTMLDivElement | null) => {
+        ref.current = el;
+        viewportRef.current = el;
+    }, [ref, viewportRef]);
+
+    if (jsLayout) {
+        // BUG-15 (2026-05-06): the original PERF-12 design positioned slots
+        // via `position: absolute; transform: translate(x, y)` inside a
+        // `position: relative; contain: layout` wrapper. Firefox's
+        // hit-testing for those abs children was broken — getBoundingClientRect
+        // reported the correct rect but elementFromPoint at the slot center
+        // returned the wrapper, so lower-row slots became unclickable. Fixed
+        // by reverting to the same CSS Grid auto-fill placement the legacy
+        // path uses; slots are now normal grid items, hit-tested correctly.
+        // We KEEP the per-region IntersectionObserver virtualization gate
+        // (off-screen regions skip rendering all 150 slot DOM nodes), and
+        // keep `useSlotLayout` only for the off-screen height reservation
+        // so scroll position survives a region scrolling out of viewport.
+        return (
+            <div
+                ref={setWrapperRef}
+                className="grid gap-1 sm:gap-1.5 justify-start"
+                style={{
+                    gridTemplateColumns: `repeat(auto-fill, ${slotPx}px)`,
+                    // Reserve height when slots aren't rendered (off-screen
+                    // virtualization). When `inViewport`, the grid auto-sizes
+                    // to its rendered children and minHeight becomes a no-op.
+                    minHeight: inViewport ? undefined : layout.totalHeight,
+                }}
+            >
+                {inViewport ? orderedPokemon.map(renderSlot) : null}
+            </div>
+        );
+    }
+
+    return (
+        <div
+            className="grid gap-1 sm:gap-1.5 justify-start"
+            style={{
+                // Switch from flex flex-wrap to CSS Grid auto-fill.
+                // Grid auto-placement is faster than flex-wrap
+                // because the cell grid is precomputed: every cell
+                // is exactly slotPx, so children just drop into
+                // the next available cell. flex-wrap had to do
+                // intrinsic-size resolution per child to determine
+                // row breaks.
+                gridTemplateColumns: `repeat(auto-fill, ${slotPx}px)`,
+            }}
+        >
+            {pokemonInGen.map(renderSlot)}
+        </div>
+    );
+};
 
 export const DexGrid: React.FC = () => {
     const { allPokemon, unlockedIds, checkedIds, hintedIds, shinyIds, generationFilter, uiSettings, gameMode, isPokemonGuessable, shuffleEndTime, releasedIds, activeRegions, regionPasses, regionLocksEnabled, startingRegion, typeFilter, dexFilter, setDexFilter, categoryFilter, usedPokegears, usedPokedexes, derpyfiedIds } = useGame();
@@ -33,6 +198,14 @@ export const DexGrid: React.FC = () => {
     });
 
     const [regionOpen, setRegionOpen] = useState<Record<string, boolean>>(() => {
+        // Perf-mode override: force every region open so each run measures the
+        // same workload. Skips localStorage so prior collapsed regions don't
+        // skew the timing.
+        if (isPerfMode()) {
+            const all: Record<string, boolean> = {};
+            for (const g of GENERATIONS) all[g.label] = true;
+            return all;
+        }
         try {
             const saved = localStorage.getItem(REGION_LAYOUT_KEY);
             if (saved) return JSON.parse(saved).open ?? {};
@@ -41,8 +214,20 @@ export const DexGrid: React.FC = () => {
     });
 
     useEffect(() => {
+        // Don't persist perf-mode forced state.
+        if (isPerfMode()) return;
         localStorage.setItem(REGION_LAYOUT_KEY, JSON.stringify({ order: regionOrder, open: regionOpen }));
     }, [regionOrder, regionOpen]);
+
+    // Perf harness: mark DexGrid mount once, set expected slot count from the
+    // pokemon list so the harness can fire all-slots-mounted / all-sprites-loaded
+    // when the counters reach it.
+    useEffect(() => {
+        markDexGridMount();
+    }, []);
+    useEffect(() => {
+        if (allPokemon.length > 0) setExpectedSlots(allPokemon.length);
+    }, [allPokemon.length]);
 
     const toggleRegion = useCallback((label: string) => {
         setRegionOpen(prev => ({ ...prev, [label]: prev[label] === false }));
@@ -139,9 +324,30 @@ export const DexGrid: React.FC = () => {
 
     const activeCount = generationFilter.length;
 
-    const containerClass = uiSettings.masonry
-        ? `columns-1 ${activeCount > 1 ? 'sm:columns-2' : ''} ${activeCount > 2 ? 'lg:columns-3' : ''} ${activeCount > 3 ? 'xl:columns-4' : ''} ${activeCount > 4 ? '2xl:columns-5' : ''} gap-3 sm:gap-4 px-1 sm:px-4 pb-32 space-y-3 sm:space-y-4`
-        : `grid grid-cols-1 ${activeCount > 1 ? 'sm:grid-cols-2' : ''} ${activeCount > 2 ? 'lg:grid-cols-3' : ''} ${activeCount > 3 ? 'xl:grid-cols-4' : ''} ${activeCount > 4 ? '2xl:grid-cols-5' : ''} gap-3 sm:gap-4 px-1 sm:px-4 pb-32 items-start`;
+    // Slot pixel size. Hoisted from PokemonSlot so DexGrid can drive the
+    // grid track size on the slot wrap. Single source of truth shared by
+    // the wrapping container and the slots themselves.
+    const slotPx = 44 * uiSettings.spriteSize;
+
+    // Effective column count: 'auto' tracks activeCount (existing behavior);
+    // a manual override is capped at activeCount so we don't render empty
+    // cells. Discord 2026-05-06 feedback: with 1 active region the dex grid
+    // wasted horizontal space; this setting lets users force more / fewer
+    // columns regardless of how many regions they have on.
+    const effectiveColumns = uiSettings.dexGridColumns === 'auto'
+        ? Math.min(activeCount, 5)
+        : Math.min(uiSettings.dexGridColumns, activeCount);
+
+    // Build the responsive grid/columns class string from effectiveColumns.
+    // Uses the same breakpoint scheme as before so small screens still stack.
+    const colTokens = uiSettings.masonry
+        ? ['columns-1', 'sm:columns-2', 'lg:columns-3', 'xl:columns-4', '2xl:columns-5']
+        : ['grid-cols-1', 'sm:grid-cols-2', 'lg:grid-cols-3', 'xl:grid-cols-4', '2xl:grid-cols-5'];
+    const responsiveCols = colTokens.slice(0, effectiveColumns).join(' ');
+    const baseLayout = uiSettings.masonry
+        ? 'gap-3 sm:gap-4 px-1 sm:px-4 pb-32 space-y-3 sm:space-y-4'
+        : 'grid gap-3 sm:gap-4 px-1 sm:px-4 pb-32 items-start';
+    const containerClass = `${responsiveCols} ${baseLayout}`;
 
     const toggleDexFilter = (key: 'guessable' | 'guessed') => {
         setDexFilter(prev => {
@@ -153,6 +359,13 @@ export const DexGrid: React.FC = () => {
 
     const guessableCount = allPokemon.filter(p => !checkedIds.has(p.id) && isPokemonGuessable(p.id).canGuess).length;
     const guessedCount = allPokemon.filter(p => checkedIds.has(p.id) && !releasedIds.has(p.id)).length;
+
+    // PERF-12: JS-driven absolute slot positioning is the default. The
+    // ?legacyDexGrid=1 query param is the escape hatch back to the previous
+    // CSS Grid auto-fill path. Computed once per render (cheap;
+    // URLSearchParams is fast). Could be hoisted to module scope, but keeping
+    // it here lets dev hot-reload pick up flag changes without a full reload.
+    const jsLayout = !isLegacyDexGridMode();
 
     return (
         <div className="flex flex-col">
@@ -280,7 +493,7 @@ export const DexGrid: React.FC = () => {
                         onDrop={() => handleDrop(gen.label)}
                         {...(genIndex === 0 ? { 'data-tour': 'dex-region' } : {})}
                         className={`
-                            border backdrop-blur-sm shadow-2xl flex flex-col h-fit
+                            border shadow-2xl flex flex-col h-fit
                             region-card-${regionSlug} region-bg-${regionSlug}
                             ${uiSettings.masonry ? 'break-inside-avoid mb-4' : ''}
                             w-full transition-all duration-150
@@ -337,41 +550,47 @@ export const DexGrid: React.FC = () => {
                             />
                         </div>
 
-                        {/* PERF-03: unmount collapsed region bodies. Sprites re-fetch from
-                            IDB on re-expand (fast, tens of ms per slot). Keeps ~700 of the
-                            1025 DOM nodes out of the tree when users keep most regions
-                            collapsed. Previously always-mounted to preserve sprite state,
-                            but since PERF-02 broke the context-churn chain and useSpriteManager
-                            already caches in IDB, the always-mounted tradeoff is no longer
-                            worth the DOM weight. */}
-                        {isRegionOpen && (
-                            <div className="px-2 pb-3 sm:px-4 sm:pb-4">
-                                <div className="flex flex-wrap gap-1 sm:gap-1.5 justify-start">
-                                    {pokemonInGen.map(p => {
-                                        // PERF-02: compute per-pokemon state here so PokemonSlot
-                                        // can be a context-free consumer. Pokemon that don't
-                                        // change between renders skip React.memo thanks to
-                                        // primitive-only props + PokemonSlotContext narrowing.
-                                        const { canGuess, reason } = isPokemonGuessable(p.id);
-                                        return (
-                                            <PokemonSlot
-                                                key={p.id}
-                                                pokemon={p}
-                                                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                                                status={getStatus(p.id) as any}
-                                                isShiny={shinyIds.has(p.id)}
-                                                order={shuffleOrder.get(p.id)}
-                                                canGuess={canGuess}
-                                                reason={reason}
-                                                isReleased={releasedIds.has(p.id)}
-                                                isPokegeared={usedPokegears.has(p.id)}
-                                                isDerpified={derpyfiedIds.has(p.id)}
-                                            />
-                                        );
-                                    })}
-                                </div>
-                            </div>
-                        )}
+                        {/* Region body. Always mounted; display toggles via the
+                            isRegionOpen flag. Trace analysis 2026-05-06 showed
+                            PERF-03's conditional unmount caused per-click Layout
+                            of ~800ms because React reconciled 150 components +
+                            DOM mutated + parent dex-grid container reflowed.
+                            With always-mounted + display:none, closing a region
+                            short-circuits subtree layout entirely (browser skips
+                            display:none subtrees) and opening is just a style
+                            change with no React reconciliation cost.
+
+                            The earlier DOM-weight win from PERF-03 is real but
+                            lesser than the per-click layout cost. content-visibility:auto
+                            could later layer on top for offscreen virtualization
+                            when this is shipped. */}
+                        <div
+                            className="px-2 pb-3 sm:px-4 sm:pb-4"
+                            style={{
+                                display: isRegionOpen ? undefined : 'none',
+                                contain: 'layout',
+                                // content-visibility: auto was tried 2026-05-06
+                                // (commit 2e1173b) and reverted: it added
+                                // intersection-check + on-demand-layout work to
+                                // every scroll event in our stacked-region
+                                // layout, which made scrolling perceptibly
+                                // janky and increased total Layout count from
+                                // 41 -> 102 events per session. Net negative.
+                            }}
+                        >
+                            <RegionSlots
+                                pokemonInGen={pokemonInGen}
+                                shuffleOrder={shuffleOrder}
+                                slotPx={slotPx}
+                                statusFor={getStatus}
+                                canGuessFor={isPokemonGuessable}
+                                shinyIds={shinyIds}
+                                releasedIds={releasedIds}
+                                usedPokegears={usedPokegears}
+                                derpyfiedIds={derpyfiedIds}
+                                jsLayout={jsLayout}
+                            />
+                        </div>
                     </div>
                 );
             })}

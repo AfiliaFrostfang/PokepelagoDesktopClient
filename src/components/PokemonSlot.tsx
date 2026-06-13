@@ -1,12 +1,23 @@
 import React from 'react';
+import clsx from 'clsx';
 import type { PokemonRef } from '../types/pokemon';
 import { usePokemonSlotContext } from '../context/PokemonSlotContext';
 import { getCleanName } from '../utils/pokemon';
-import pokemonMetadata from '../data/pokemon_metadata.json';
 import pokemonNamesJson from '../data/pokemon_names.json';
-import { TYPE_COLORS } from '../utils/typeColors';
+import { TYPE_DOT_DEFAULT_STYLE, getTypeDotStyleForId, getTypeTitleForId } from '../utils/typeDotStyles';
 import { PmdSpriteCanvas } from './PmdSpriteCanvas';
 import { normalizePmdBaseUrl } from '../services/pmdSpriteService';
+import { recordSlotMount, recordSlotRender, recordSpriteLoaded } from '../utils/perfHarness';
+
+// Per-status border / shadow utility classes. Lookup table is a tiny but real
+// win over the if/else chain that ran for every slot render.
+const BORDER_CLASS_RELEASED = 'bg-blue-950/30 border-blue-800/30 opacity-40';
+const BORDER_CLASS_CHECKED = 'bg-green-900/40 border-green-700/60';
+const BORDER_CLASS_GUESSABLE = 'bg-emerald-950/80 border-green-500/70 shadow-[0_0_8px_rgba(34,197,94,0.35)]';
+const BORDER_CLASS_SHADOW = 'bg-blue-950/30 border-blue-800/30 opacity-40';
+const BORDER_CLASS_UNLOCKED = 'bg-gray-900/40 border-gray-700/40 opacity-35 grayscale';
+const BORDER_CLASS_HINT = 'bg-indigo-950/40 border-indigo-900/40 opacity-60';
+const BORDER_CLASS_LOCKED = 'bg-gray-800/60 border-gray-700/30';
 
 interface PokemonSlotProps {
     pokemon: PokemonRef;
@@ -28,10 +39,19 @@ const PokemonSlotImpl: React.FC<PokemonSlotProps> = ({
     pokemon, status, isShiny = false, order,
     canGuess, reason, isReleased, isPokegeared, isDerpified,
 }) => {
-    const { setSelectedPokemonId, getSpriteUrl, uiSettings, spriteRefreshCounter, pmdSpriteUrl } = usePokemonSlotContext();
+    const { setSelectedPokemonId, acquireSlotSpriteUrl, releaseSlotSpriteUrl, peekSlotSpriteUrl, uiSettings, spriteRefreshCounter, pmdSpriteUrl, lang } = usePokemonSlotContext();
 
-    const [spriteUrl, setSpriteUrl] = React.useState<string | null>(null);
-    const [isLoaded, setIsLoaded] = React.useState(false);
+    // Perf harness counters (no-op when ?perf=1 is not set).
+    recordSlotRender();
+    React.useEffect(() => { recordSlotMount(pokemon.id); }, [pokemon.id]);
+
+    // On (re)mount, hydrate from the cache synchronously if available so
+    // toggling regions doesn't flash opacity-0 while the sprite re-resolves.
+    // Lazy initializer so the peek runs once per mount, not per render.
+    const [spriteUrl, setSpriteUrl] = React.useState<string | null>(
+        () => peekSlotSpriteUrl(pokemon.id, { shiny: isShiny, derpyfied: isDerpified })
+    );
+    const [isLoaded, setIsLoaded] = React.useState(() => spriteUrl !== null);
     const [hasError, setHasError] = React.useState(false);
     const [hasHovered, setHasHovered] = React.useState(false);
 
@@ -61,73 +81,85 @@ const PokemonSlotImpl: React.FC<PokemonSlotProps> = ({
         setPlayingAttack(false);
     }, [normalizedPmdUrl]);
 
-    // Load sprite. Cleanup does NOT null spriteUrl -- the <img> keeps rendering
-    // the old (possibly just-revoked) blob URL until the next effect resolves,
-    // which eliminates the blank flash on every re-run.
+    // Load sprite via the shared refcounted cache (services/spriteUrlCache.ts).
+    // Acquire on mount + release on unmount: blob URLs survive remount, so
+    // toggling a region (which unmounts every PokemonSlot in it via PERF-03)
+    // no longer triggers a 150-blob revoke/recreate burst with the visible
+    // opacity-0 flicker that Discord users were reporting. The cache is
+    // evicted explicitly when spriteRefreshCounter changes (sprite-set toggle,
+    // disconnect, debug refresh, shuffle trap).
     React.useEffect(() => {
-        let active = true;
-        let createdUrl: string | null = null;
-        const loadSprite = async () => {
-            if (!uiSettings.enableSprites) {
-                if (active) {
-                    setSpriteUrl(null);
-                    setHasError(true);
-                }
-                return;
-            }
+        if (!uiSettings.enableSprites) {
+            setSpriteUrl(null);
+            setHasError(true);
+            return;
+        }
 
-            const url = await getSpriteUrl(pokemon.id, { shiny: isShiny });
+        let active = true;
+        const { key, promise } = acquireSlotSpriteUrl(pokemon.id, {
+            shiny: isShiny,
+            derpyfied: isDerpified,
+        });
+        promise.then((url) => {
             if (active) {
-                createdUrl = url;
                 setSpriteUrl(url);
                 if (!url) setHasError(true);
-            } else if (url && url.startsWith('blob:')) {
-                URL.revokeObjectURL(url);
             }
-        };
-        loadSprite();
+        }).catch(() => {
+            if (active) setHasError(true);
+        });
         return () => {
             active = false;
-            if (createdUrl && createdUrl.startsWith('blob:')) URL.revokeObjectURL(createdUrl);
+            releaseSlotSpriteUrl(key);
         };
-    }, [pokemon.id, isShiny, getSpriteUrl, uiSettings.enableSprites, spriteRefreshCounter, isDerpified]);
+    }, [pokemon.id, isShiny, isDerpified, acquireSlotSpriteUrl, releaseSlotSpriteUrl, uiSettings.enableSprites, spriteRefreshCounter]);
 
-    // Reset load state when url changes
+    // Reset load state when the URL actually changes (e.g. derp flip swaps to
+    // a different blob). Skip the first run so a cache-hydrated mount doesn't
+    // clobber its own isLoaded=true initial state and re-introduce the
+    // opacity-0 flash we just removed.
+    const prevSpriteUrlRef = React.useRef(spriteUrl);
     React.useEffect(() => {
-        setIsLoaded(false);
-        setHasError(false);
+        if (prevSpriteUrlRef.current !== spriteUrl) {
+            setIsLoaded(false);
+            setHasError(false);
+            prevSpriteUrlRef.current = spriteUrl;
+        }
     }, [spriteUrl]);
+
+    // Perf harness: report when this slot has reached a "settled" state for
+    // sprite loading (loaded, errored, or sprites disabled). Dedup by id is
+    // handled in the harness.
+    React.useEffect(() => {
+        if (!uiSettings.enableSprites || isLoaded || hasError) {
+            recordSpriteLoaded(pokemon.id);
+        }
+    }, [pokemon.id, uiSettings.enableSprites, isLoaded, hasError]);
 
     const isChecked = status === 'checked';
     const isVisible = isChecked || status === 'shadow' || status === 'hint';
-    const lang = localStorage.getItem('pokepelago_language') ?? 'en';
     const langNames = (pokemonNamesJson as Record<string, Record<string, string>>)[pokemon.id.toString()];
     const localName = lang !== 'global' && langNames?.[lang];
     const cleanName = localName || getCleanName(pokemon.name);
 
     const isReadyToGuess = !isChecked && canGuess;
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const rawTypes: string[] = (pokemonMetadata as any)[pokemon.id]?.types ?? [];
-    const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
-    const typeDotStyle: React.CSSProperties = (() => {
-        if (!uiSettings.typeDot) return { backgroundColor: '#4ade80', boxShadow: '0 0 4px #4ade80aa' };
-        const typeColor1 = TYPE_COLORS[capitalize(rawTypes[0])] ?? '#4ade80';
-        const typeColor2 = rawTypes[1] ? (TYPE_COLORS[capitalize(rawTypes[1])] ?? typeColor1) : typeColor1;
-        return rawTypes.length >= 2
-            ? { background: `linear-gradient(135deg, ${typeColor1} 50%, ${typeColor2} 50%)`, boxShadow: `0 0 4px ${typeColor1}aa` }
-            : { backgroundColor: typeColor1, boxShadow: `0 0 4px ${typeColor1}aa` };
-    })();
+    // Type-dot style + tooltip both come from a precomputed map (one pass over
+    // pokemonMetadata at module load). Replaces a per-render IIFE that built
+    // CSSProperties from scratch across 1025 slots.
+    const typeDotStyle = uiSettings.typeDot
+        ? getTypeDotStyleForId(pokemon.id)
+        : TYPE_DOT_DEFAULT_STYLE;
+    const typeTitle = getTypeTitleForId(pokemon.id);
 
-    const getBorderClass = () => {
-        if (isReleased) return 'bg-blue-950/30 border-blue-800/30 opacity-40';
-        if (isChecked) return 'bg-green-900/40 border-green-700/60';
-        if (isReadyToGuess) return 'bg-emerald-950/80 border-green-500/70 shadow-[0_0_8px_rgba(34,197,94,0.35)]';
-        if (status === 'shadow') return 'bg-blue-950/30 border-blue-800/30 opacity-40';
-        if (status === 'unlocked') return 'bg-gray-900/40 border-gray-700/40 opacity-35 grayscale';
-        if (status === 'hint') return 'bg-indigo-950/40 border-indigo-900/40 opacity-60';
-        return 'bg-gray-800/60 border-gray-700/30'; // locked
-    };
+    const borderClass =
+        isReleased ? BORDER_CLASS_RELEASED :
+        isChecked ? BORDER_CLASS_CHECKED :
+        isReadyToGuess ? BORDER_CLASS_GUESSABLE :
+        status === 'shadow' ? BORDER_CLASS_SHADOW :
+        status === 'unlocked' ? BORDER_CLASS_UNLOCKED :
+        status === 'hint' ? BORDER_CLASS_HINT :
+        BORDER_CLASS_LOCKED;
 
     // FEAT-10: slot + sprite size is driven by uiSettings.spriteSize (1x / 2x / 4x).
     // Base = 44px (original w-11). Users with complaints about sprites being too small
@@ -156,14 +188,30 @@ const PokemonSlotImpl: React.FC<PokemonSlotProps> = ({
             onMouseEnter={() => {
                 if (!uiSettings.persistentDot && isReadyToGuess && !hasHovered) setHasHovered(true);
             }}
-            className={`
-                flex items-center justify-center transition-all duration-300 relative group cursor-pointer
-                border
-                ${getBorderClass()}
-                ${isReadyToGuess ? 'hover:scale-110 hover:shadow-[0_0_14px_rgba(34,197,94,0.6)] active:scale-95' : 'hover:scale-105 active:scale-95'}
-                ${isShiny && isChecked ? 'shadow-[0_0_10px_rgba(255,215,0,0.4)]' : ''}
-            `}
-            style={{ width: slotPx, height: slotPx, borderRadius: 'var(--pp-slot-radius)', ...(order !== undefined ? { order } : {}) }}
+            className={clsx(
+                // 2026-05-06: hover transition removed entirely. With 1025
+                // slots each carrying transform/box-shadow transition watchers,
+                // every paint frame the browser checks them all for changes.
+                // Snap-hover (instant scale + shadow on :hover) trades a tiny
+                // bit of visual polish for measurable style-recalc reduction
+                // during sidebar toggle / region toggle.
+                'flex items-center justify-center relative group cursor-pointer border',
+                // Static styles moved from inline style obj to class — saves
+                // per-slot inline style application across 1025 elements.
+                // contain: layout scope-limits reflow within the slot.
+                // [contain:layout] is Tailwind arbitrary syntax.
+                '[contain:layout] [border-radius:var(--pp-slot-radius)]',
+                borderClass,
+                isReadyToGuess
+                    ? 'hover:scale-110 hover:shadow-[0_0_14px_rgba(34,197,94,0.6)] active:scale-95'
+                    : 'hover:scale-105 active:scale-95',
+                isShiny && isChecked && 'shadow-[0_0_10px_rgba(255,215,0,0.4)]',
+            )}
+            style={{
+                width: slotPx,
+                height: slotPx,
+                ...(order !== undefined ? { order } : {}),
+            }}
             title={!canGuess ? reason : (isChecked ? cleanName : status === 'hint' ? `${cleanName} (Hinted)` : `#${pokemon.id}`)}
         >
             {isVisible && normalizedPmdUrl && !pmdError && (
@@ -185,21 +233,28 @@ const PokemonSlotImpl: React.FC<PokemonSlotProps> = ({
             )}
 
             {isVisible && !normalizedPmdUrl && !hasError && spriteUrl && (
-                <div className="absolute inset-0 flex items-center justify-center overflow-hidden pointer-events-none">
-                    <img
-                        src={spriteUrl}
-                        alt={isChecked ? pokemon.name : `Pokemon #${pokemon.id}`}
-                        onLoad={() => setIsLoaded(true)}
-                        onError={() => setHasError(true)}
-                        className={`object-contain z-10 transition-all duration-300 ${isLoaded ? 'opacity-100' : 'opacity-0'}`}
-                        style={{
-                            imageRendering: 'pixelated',
-                            width: slotPx,
-                            height: slotPx,
-                            ...(silhouetteFilter ? { filter: silhouetteFilter, opacity: isLoaded ? silhouetteOpacity : 0 } : {}),
-                        }}
-                    />
-                </div>
+                // DOM consolidation 2026-05-06: merged a wrapper <div> into the
+                // <img>. The wrapper existed for centering, but the img is
+                // exactly slot-sized via inline width/height, so centering was
+                // a no-op. Saves one DOM node per visible slot — ~1000 nodes
+                // for a fully-checked dex.
+                <img
+                    src={spriteUrl}
+                    alt={isChecked ? pokemon.name : `Pokemon #${pokemon.id}`}
+                    decoding="async"
+                    onLoad={() => setIsLoaded(true)}
+                    onError={() => setHasError(true)}
+                    className={clsx(
+                        'absolute inset-0 object-contain z-10 pointer-events-none transition-opacity duration-300',
+                        isLoaded ? 'opacity-100' : 'opacity-0',
+                    )}
+                    style={{
+                        imageRendering: 'pixelated',
+                        width: slotPx,
+                        height: slotPx,
+                        ...(silhouetteFilter ? { filter: silhouetteFilter, opacity: isLoaded ? silhouetteOpacity : 0 } : {}),
+                    }}
+                />
             )}
 
             {uiSettings.showDexNumbers && (() => {
@@ -216,18 +271,23 @@ const PokemonSlotImpl: React.FC<PokemonSlotProps> = ({
                 );
             })()}
 
-            {/* Shiny sparkle indicator */}
+            {/* Shiny sparkle indicator (single span — wrapper div removed) */}
             {isShiny && isChecked && (
-                <div className="absolute top-0.5 right-0.5 z-20 animate-pulse">
-                    <span className="leading-none drop-shadow-[0_0_2px_rgba(255,215,0,0.8)]" style={{ fontSize: 10 * uiSettings.spriteSize }}>✨</span>
-                </div>
+                <span
+                    className="absolute top-0.5 right-0.5 z-20 animate-pulse leading-none drop-shadow-[0_0_2px_rgba(255,215,0,0.8)]"
+                    style={{ fontSize: 10 * uiSettings.spriteSize }}
+                >✨</span>
             )}
 
-            {/* Guessable indicator — type-colored dot; persistent or notification-style */}
+            {/* Guessable indicator — type-colored dot. Wrapper div removed: it
+                conditionally renders/unrenders on hasHovered toggle (no fade
+                between states), so the previous transition-opacity was dead. */}
             {isReadyToGuess && (uiSettings.persistentDot || !hasHovered) && (
-                <div className="absolute top-0.5 right-0.5 z-20 transition-opacity duration-300" title={rawTypes.map(capitalize).join(' / ')}>
-                    <span className="block rounded-full" style={{ ...typeDotStyle, width: 6 * uiSettings.spriteSize, height: 6 * uiSettings.spriteSize }} />
-                </div>
+                <span
+                    className="absolute top-0.5 right-0.5 z-20 block rounded-full"
+                    title={typeTitle}
+                    style={{ ...typeDotStyle, width: 6 * uiSettings.spriteSize, height: 6 * uiSettings.spriteSize }}
+                />
             )}
 
             {status === 'unlocked' && (
@@ -238,12 +298,11 @@ const PokemonSlotImpl: React.FC<PokemonSlotProps> = ({
                 <span className="text-gray-700" style={{ fontSize: 10 * uiSettings.spriteSize }}>●</span>
             )}
 
-            {/* Tooltip */}
-            {isChecked && (
-                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-1 bg-gray-900 text-xs text-white rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-20 pointer-events-none border border-gray-700 shadow-xl">
-                    {cleanName}
-                </div>
-            )}
+            {/* Tooltip removed: the outer div already has title={cleanName}
+                for checked slots, so the browser's native tooltip shows the
+                same name on hover. The custom styled tooltip was duplicate
+                DOM weight (one <div> per checked slot — hundreds in a played-
+                through dex) and added paint cost on every hover. */}
         </div>
     );
 };

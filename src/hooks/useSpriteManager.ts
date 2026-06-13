@@ -3,13 +3,24 @@ import type { UISettings } from '../context/GameContext';
 import { getSprite, countSprites, generateSpriteKey } from '../services/spriteService';
 import { resolveExternalSpriteUrl } from '../utils/pokesprite';
 import { getDerpemonUrl, type DerpemonIndex } from '../services/derpemonService';
+import {
+    acquireSpriteUrl,
+    releaseSpriteUrl,
+    evictAllSpriteUrls,
+    peekSpriteUrl,
+    spriteUrlCacheKey,
+} from '../services/spriteUrlCache';
 
 export function useSpriteManager(params: {
     uiSettings: UISettings;
     derpyfiedIds: Set<number>;
     derpemonIndex: DerpemonIndex;
+    // Canonical sprite-refresh counter is owned by useTrapHandler and lifted
+    // through GameContext. We observe it here to trigger cache eviction; we
+    // do NOT own a duplicate state.
+    spriteRefreshCounter: number;
 }) {
-    const { uiSettings, derpyfiedIds, derpemonIndex } = params;
+    const { uiSettings, derpyfiedIds, derpemonIndex, spriteRefreshCounter } = params;
 
     const [spriteCount, setSpriteCount] = useState(0);
     const [spriteRepoUrl, setSpriteRepoUrlState] = useState<string>(() => {
@@ -20,7 +31,6 @@ export function useSpriteManager(params: {
         const qp = new URLSearchParams(window.location.search);
         return qp.get('pmd') || localStorage.getItem('pokepelago_pmdSpriteUrl') || '';
     });
-    const [spriteRefreshCounter, setSpriteRefreshCounter] = useState<number>(0);
 
     // derpyfiedIds is read through a ref rather than a callback dep: if it were a
     // dep, every Derpy trap would recreate getSpriteUrl, propagate through every
@@ -51,20 +61,34 @@ export function useSpriteManager(params: {
         refreshSpriteCount();
     }, [refreshSpriteCount]);
 
-    const getSpriteUrl = useCallback(async (id: number, options: { shiny?: boolean; animated?: boolean } = {}) => {
-        // 0. Derp Trap Forced Override (takes highest precedence)
-        if (derpyfiedIdsRef.current.has(id) && !options.animated) {
+    // Evict the URL cache whenever spriteRefreshCounter changes. The counter
+    // bumps on sprite-set/enableSprites toggle, manual debug refresh, shuffle
+    // traps, and resets to 0 on disconnect -- all cases where the previously
+    // resolved URLs are stale.
+    const lastEvictedCounterRef = useRef<number>(spriteRefreshCounter);
+    useEffect(() => {
+        if (lastEvictedCounterRef.current !== spriteRefreshCounter) {
+            evictAllSpriteUrls();
+            lastEvictedCounterRef.current = spriteRefreshCounter;
+        }
+    }, [spriteRefreshCounter]);
+
+    // Pure factory: resolve a sprite URL from configured sources. Captures
+    // derpemonIndex / spriteRepoUrl / spriteSet / enableSprites; the cache
+    // gets evicted via spriteRefreshCounter when these change so the next
+    // acquire re-runs the factory.
+    const resolveSpriteUrl = useCallback(async (
+        id: number,
+        options: { shiny?: boolean; animated?: boolean; derpyfied?: boolean },
+    ): Promise<string | null> => {
+        if (options.derpyfied && !options.animated) {
             const derpemonUrl = getDerpemonUrl(derpemonIndex, id);
             if (derpemonUrl) return derpemonUrl;
         }
-
-        // 1. Derpemon sprite set (GitHub CDN, static sprites only — no shiny/animated)
         if (uiSettings.spriteSet === 'derpemon' && !options.animated) {
             const derpemonUrl = getDerpemonUrl(derpemonIndex, id);
             if (derpemonUrl) return derpemonUrl;
         }
-
-        // 2. Check local IDB sprites
         if (uiSettings.enableSprites) {
             const key = generateSpriteKey(id, options);
             const blob = await getSprite(key);
@@ -72,13 +96,47 @@ export function useSpriteManager(params: {
                 return URL.createObjectURL(blob);
             }
         }
-
-        // 3. Fall back to external repo URL if configured
         if (spriteRepoUrl) {
             return resolveExternalSpriteUrl(spriteRepoUrl, id, options);
         }
         return null;
     }, [derpemonIndex, spriteRepoUrl, uiSettings.spriteSet, uiSettings.enableSprites]);
+
+    // Cache-aware acquire/release pair for PokemonSlot. Slot calls acquire on
+    // mount with a stable key derived from (id, shiny, derpyfied); remounts
+    // (region toggle, derp flip) hit the cache synchronously after the first
+    // resolution. The slot is responsible for calling releaseSlotSpriteUrl
+    // on unmount.
+    const acquireSlotSpriteUrl = useCallback((
+        id: number,
+        options: { shiny?: boolean; animated?: boolean; derpyfied?: boolean },
+    ): { key: string; promise: Promise<string | null> } => {
+        const key = spriteUrlCacheKey(id, options);
+        const promise = acquireSpriteUrl(key, () => resolveSpriteUrl(id, options));
+        return { key, promise };
+    }, [resolveSpriteUrl]);
+
+    const releaseSlotSpriteUrl = useCallback((key: string): void => {
+        releaseSpriteUrl(key);
+    }, []);
+
+    const peekSlotSpriteUrl = useCallback((
+        id: number,
+        options: { shiny?: boolean; animated?: boolean; derpyfied?: boolean },
+    ): string | null => {
+        return peekSpriteUrl(spriteUrlCacheKey(id, options));
+    }, []);
+
+    // Legacy single-shot getSpriteUrl, kept for PokemonDetails (only one open
+    // at a time, no remount churn). Reads the live derpyfied set via the ref
+    // so per-pokemon flips don't recreate the callback.
+    const getSpriteUrl = useCallback(async (
+        id: number,
+        options: { shiny?: boolean; animated?: boolean } = {},
+    ) => {
+        const derpyfied = derpyfiedIdsRef.current.has(id);
+        return resolveSpriteUrl(id, { ...options, derpyfied });
+    }, [resolveSpriteUrl]);
 
     return {
         spriteCount,
@@ -86,9 +144,10 @@ export function useSpriteManager(params: {
         setSpriteRepoUrl,
         pmdSpriteUrl,
         setPmdSpriteUrl,
-        spriteRefreshCounter,
-        setSpriteRefreshCounter,
         refreshSpriteCount,
         getSpriteUrl,
+        acquireSlotSpriteUrl,
+        releaseSlotSpriteUrl,
+        peekSlotSpriteUrl,
     };
 }

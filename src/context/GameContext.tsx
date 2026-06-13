@@ -8,11 +8,8 @@ import pokemonMetadata from '../data/pokemon_metadata.json';
 import { getCleanName } from '../utils/pokemon';
 import { updateProfile } from '../services/connectionManagerService';
 import { loadDerpemonIndex, type DerpemonIndex } from '../services/derpemonService';
-import {
-    SUB_LEGENDARY_IDS, BOX_LEGENDARY_IDS, MYTHIC_IDS,
-    BABY_IDS, TRADE_EVO_IDS, FOSSIL_IDS, ULTRA_BEAST_IDS, PARADOX_IDS,
-    STONE_EVO_IDS, STONE_NAMES_ORDERED,
-} from '../data/pokemon_gates';
+import { STONE_NAMES_ORDERED } from '../data/pokemon_gates';
+import { buildEffectiveGates, type ServerGateCategories } from '../data/gateCategories';
 import { getRouteKeysForPokemon, getLineUnlockForPokemon, getBadgeRequirement, ROUTE_KEY_ITEMS, ROUTE_INFO, ROUTE_POKEMON } from '../data/routeData';
 import { decodeRouteKey, decodeLineUnlock, decodeTypeKey, decodeRegionPass } from '../data/itemDecoding';
 import type { OffsetTable } from '../hooks/useOffsets';
@@ -28,6 +25,31 @@ import { PokemonSlotContext, type PokemonSlotContextValue } from './PokemonSlotC
 function safeSetItem(key: string, value: string): void {
     try { localStorage.setItem(key, value); }
     catch { console.warn(`[localStorage] Failed to write key "${key}" (quota exceeded?)`); }
+}
+
+// PERF-07: coalesce high-frequency persistence writes (e.g. the caught set, which used to
+// write on every single guess — 100+ writes/min during rapid play) into at most one write
+// per key per `delay`. The latest value always wins. flushPendingWrites() forces all pending
+// writes immediately and is wired to pagehide so progress is never lost on tab close
+// (critical for standalone mode, where localStorage is the source of truth).
+const _writeTimers: Record<string, ReturnType<typeof setTimeout>> = {};
+const _pendingWrites: Record<string, string> = {};
+function debouncedSetItem(key: string, value: string, delay = 1000): void {
+    _pendingWrites[key] = value;
+    if (_writeTimers[key]) clearTimeout(_writeTimers[key]);
+    _writeTimers[key] = setTimeout(() => {
+        safeSetItem(key, _pendingWrites[key]);
+        delete _pendingWrites[key];
+        delete _writeTimers[key];
+    }, delay);
+}
+function flushPendingWrites(): void {
+    for (const key of Object.keys(_pendingWrites)) {
+        clearTimeout(_writeTimers[key]);
+        safeSetItem(key, _pendingWrites[key]);
+        delete _pendingWrites[key];
+        delete _writeTimers[key];
+    }
 }
 
 export interface LogEntry {
@@ -119,6 +141,14 @@ export interface UISettings {
     alwaysShowTypes: boolean;
     spriteSize: 1 | 1.25 | 1.5 | 1.75 | 2;
     silhouetteGlow: boolean;
+    // FEAT-03: once the goal is reached, stop auto-submitting guesses (manual Enter only).
+    // Defaulted from the seed's stop_autosubmit_on_goal slot_data option on connect; the
+    // player can still toggle it locally.
+    stopAutosubmitOnGoal: boolean;
+    // Manual override for dex-grid column count. 'auto' tracks the activeCount
+    // (existing behavior). A specific number overrides to that count, capped
+    // at activeCount so empty cells aren't rendered.
+    dexGridColumns: 'auto' | 1 | 2 | 3 | 4 | 5;
 }
 
 interface ConnectionInfo {
@@ -288,6 +318,8 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Legacy APWorlds pre-dating the APWorld agent's slot_data change report null,
     // so the UI falls back to "unknown" or hides the version badge.
     const [apWorldServerVersion, setApWorldServerVersion] = useState<string | null>(null);
+    // DEVEX-15: gate classification sent by the server (null for legacy seeds → fallback).
+    const [serverGateCategories, setServerGateCategories] = useState<ServerGateCategories | null>(null);
     const [currentProfileId, setCurrentProfileId] = useState<string | null>(null);
     const [typeFilter, setTypeFilter] = useState<string[]>([]);
     const [dexFilter, setDexFilter] = useState<Set<'guessable' | 'guessed'>>(new Set());
@@ -349,6 +381,8 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
             alwaysShowTypes: false,
             spriteSize: 1,
             silhouetteGlow: true,
+            stopAutosubmitOnGoal: false,
+            dexGridColumns: 'auto',
         };
         if (saved) {
             try {
@@ -455,7 +489,22 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
         spriteRepoUrl, setSpriteRepoUrl,
         pmdSpriteUrl, setPmdSpriteUrl,
         refreshSpriteCount, getSpriteUrl,
-    } = useSpriteManager({ uiSettings, derpyfiedIds, derpemonIndex });
+        acquireSlotSpriteUrl, releaseSlotSpriteUrl, peekSlotSpriteUrl,
+    } = useSpriteManager({ uiSettings, derpyfiedIds, derpemonIndex, spriteRefreshCounter });
+
+    // Language hoist: read once + listen for the custom event GlobalGuessInput
+    // dispatches when the user changes language. Replaces 1025 per-render
+    // localStorage.getItem calls in PokemonSlot.
+    const [lang, setLang] = useState<string>(() => localStorage.getItem('pokepelago_language') ?? 'en');
+    useEffect(() => {
+        const handler = () => setLang(localStorage.getItem('pokepelago_language') ?? 'en');
+        window.addEventListener('pokepelago_language_changed', handler);
+        window.addEventListener('storage', handler);
+        return () => {
+            window.removeEventListener('pokepelago_language_changed', handler);
+            window.removeEventListener('storage', handler);
+        };
+    }, []);
 
     // ── Goal Checker Hook ────────────────────────────────────────────────────────
     useGoalChecker({
@@ -494,18 +543,30 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     useEffect(() => {
         if (gameMode !== 'standalone') return;
         if (checkedIds.size === 0) return;
-        safeSetItem('pokepelago_standalone_caught', JSON.stringify(Array.from(checkedIds)));
+        debouncedSetItem('pokepelago_standalone_caught', JSON.stringify(Array.from(checkedIds)));  // PERF-07
     }, [checkedIds, gameMode]);
 
     // Save caught Pokémon locally for dexsanity=OFF AP games
     useEffect(() => {
         if (gameMode !== 'archipelago' || dexsanityEnabled || !connectedTeamSlot) return;
         const { team, slot } = connectedTeamSlot;
-        safeSetItem(
+        debouncedSetItem(  // PERF-07
             `pokepelago_team_${team}_slot_${slot}_caught_local`,
             JSON.stringify(Array.from(checkedIds))
         );
     }, [checkedIds, gameMode, dexsanityEnabled, connectedTeamSlot]);
+
+    // PERF-07: flush any debounced writes on tab hide/close so progress is never lost.
+    useEffect(() => {
+        const flush = () => flushPendingWrites();
+        window.addEventListener('pagehide', flush);
+        window.addEventListener('beforeunload', flush);
+        return () => {
+            window.removeEventListener('pagehide', flush);
+            window.removeEventListener('beforeunload', flush);
+            flushPendingWrites();
+        };
+    }, []);
 
     useEffect(() => {
         safeSetItem('pokepelago_ui', JSON.stringify(uiSettings));
@@ -775,6 +836,11 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return result;
     }, [checkedIds, slotMilestones, slotTypeMilestones, routeLocksEnabled, routeKeys, activeRegions]);
 
+    // DEVEX-15: effective gate sets — from the server's slot_data when present, else the
+    // legacy (pre-0.6.2) fallback. Stable identity (only rebuilds when the payload changes)
+    // so it can sit cleanly in the gating callback's dependency array.
+    const gates = useMemo(() => buildEffectiveGates(serverGateCategories), [serverGateCategories]);
+
     const isPokemonGuessableImpl = useCallback((id: number) => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const data = (pokemonMetadata as any)[id];
@@ -852,7 +918,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 badgeReq = getBadgeRequirement(id);
             }
             if (legendaryLocksEnabled) {
-                const legendaryReq = MYTHIC_IDS.has(id) ? 8 : BOX_LEGENDARY_IDS.has(id) ? 7 : SUB_LEGENDARY_IDS.has(id) ? 6 : 0;
+                const legendaryReq = gates.mythic.has(id) ? 8 : gates.boxLegendary.has(id) ? 7 : gates.subLegendary.has(id) ? 6 : 0;
                 badgeReq = Math.max(badgeReq, legendaryReq);
             }
             if (badgeReq > 0 && gymBadges < badgeReq) {
@@ -861,18 +927,18 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
             }
         }
 
-        if (tradeLocksEnabled && TRADE_EVO_IDS.has(id) && !hasLinkCable)
+        if (tradeLocksEnabled && gates.tradeEvo.has(id) && !hasLinkCable)
             gateReasons.push('Link Cable');
-        if (babyLocksEnabled && BABY_IDS.has(id) && daycareCount < daycareRequired)
+        if (babyLocksEnabled && gates.baby.has(id) && daycareCount < daycareRequired)
             gateReasons.push(`Daycare: ${daycareCount}/${daycareRequired}`);
-        if (fossilLocksEnabled && FOSSIL_IDS.has(id) && !hasFossilRestorer)
+        if (fossilLocksEnabled && gates.fossil.has(id) && !hasFossilRestorer)
             gateReasons.push('Fossil Restorer');
-        if (ultraBeastLocksEnabled && ULTRA_BEAST_IDS.has(id) && !hasUltraWormhole)
+        if (ultraBeastLocksEnabled && gates.ultraBeast.has(id) && !hasUltraWormhole)
             gateReasons.push('Ultra Wormhole');
-        if (paradoxLocksEnabled && PARADOX_IDS.has(id) && !hasTimeRift)
+        if (paradoxLocksEnabled && gates.paradox.has(id) && !hasTimeRift)
             gateReasons.push('Time Rift');
         if (stoneLocksEnabled) {
-            for (const [stone, ids] of Object.entries(STONE_EVO_IDS)) {
+            for (const [stone, ids] of Object.entries(gates.stoneEvo)) {
                 if (ids.has(id) && !unlockedStones.has(stone))
                     gateReasons.push(`Need ${stone.charAt(0).toUpperCase()}${stone.slice(1)} Stone`);
             }
@@ -900,7 +966,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
         badgeLevelGatingEnabled, legendaryLocksEnabled, gymBadges, tradeLocksEnabled, hasLinkCable,
         babyLocksEnabled, daycareCount, daycareRequired, fossilLocksEnabled, hasFossilRestorer,
         ultraBeastLocksEnabled, hasUltraWormhole, paradoxLocksEnabled, hasTimeRift,
-        stoneLocksEnabled, unlockedStones]);
+        stoneLocksEnabled, unlockedStones, gates]);
 
     // PERF-05: wrap isPokemonGuessable in a per-id memo cache. The inner function has 28 deps
     // and ran ~1025 times per DexGrid render. Cache invalidates whenever any dep to the inner
@@ -967,6 +1033,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setSlotTypeMilestones(undefined);
         setDetectedApWorldVersion('unknown');
         setApWorldServerVersion(null);
+        setServerGateCategories(null);
         setGoal(undefined);
         setGoalCount(undefined);
 
@@ -1203,6 +1270,12 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setLineLocksEnabled(!!slotData.line_locks);
         setBadgeLevelGatingEnabled(!!slotData.badge_level_gating);
         setMasterBallBypassGates(slotData.master_ball_bypass_gates !== false);
+        // FEAT-03: pre-fill the client toggle from the seed's option (player can override).
+        if (slotData.stop_autosubmit_on_goal !== undefined) {
+            setUiSettings(s => ({ ...s, stopAutosubmitOnGoal: !!slotData.stop_autosubmit_on_goal }));
+        }
+        // DEVEX-15: gate the way the generating server did. Absent (legacy seed) → fallback.
+        setServerGateCategories(slotData.gate_categories ?? null);
         setStartingStarter(slotData.starting_starter ?? null);
 
         if (slotData.active_regions !== undefined) {
@@ -1773,10 +1846,14 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const pokemonSlotContextValue = useMemo<PokemonSlotContextValue>(() => ({
         uiSettings,
         getSpriteUrl,
+        acquireSlotSpriteUrl,
+        releaseSlotSpriteUrl,
+        peekSlotSpriteUrl,
         spriteRefreshCounter,
         pmdSpriteUrl,
         setSelectedPokemonId,
-    }), [uiSettings, getSpriteUrl, spriteRefreshCounter, pmdSpriteUrl]);
+        lang,
+    }), [uiSettings, getSpriteUrl, acquireSlotSpriteUrl, releaseSlotSpriteUrl, peekSlotSpriteUrl, spriteRefreshCounter, pmdSpriteUrl, lang]);
 
     return (
         <GameContext.Provider value={{

@@ -3,6 +3,9 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
 import { parseTwitchTokenFromHash, clearHashFromUrl, storeTwitchToken, validateTwitchToken, storeTwitchUsername } from './services/twitchAuthService'
+import { markBoot } from './utils/perfHarness';
+
+markBoot();
 
 // Handle Twitch OAuth redirect (implicit grant returns token in URL hash)
 const twitchToken = parseTwitchTokenFromHash();

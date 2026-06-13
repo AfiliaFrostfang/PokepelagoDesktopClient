@@ -22,6 +22,8 @@ interface RouteDataBundle {
     lineUnlockItems: Record<string, string>;
     pokemonLevels: Record<string, number>;
     badgeLevelThresholds: number[];
+    /** Pokemon ID → authoritative badge tier, computed by the APWorld (BUG-17). */
+    badgeRequirements: Record<string, number>;
 }
 
 const data = rawData as RouteDataBundle;
@@ -129,27 +131,21 @@ export function getLineUnlockForPokemon(pokemonId: number): string | null {
     return LINE_UNLOCK_ITEMS[String(baseId)] ?? null;
 }
 
+/** Pokemon ID → authoritative badge tier (BUG-17). Missing id means tier 0. */
+export const BADGE_REQUIREMENTS = data.badgeRequirements;
+
 /**
- * Get the badge count required for a Pokemon based on encounter level.
- * Returns 0 if no badge required or no level data.
+ * Badge count required for a Pokemon under badge-level gating.
+ *
+ * Reads the value the APWorld computed and exported (route_data.compute_badge_requirement),
+ * which is the exact tier the multiworld's access rules — and Universal Tracker — enforce.
+ * The client must NOT recompute this from encounter levels: an independent reimplementation
+ * drifted for cross-generation evolutions (client said "guessable", UT said "needs N badges"),
+ * which let players send out-of-logic checks (BUG-17, the BUG-12 drift class). A missing id
+ * means no badge requirement (tier 0).
  */
 export function getBadgeRequirement(pokemonId: number): number {
-    let level = POKEMON_LEVELS[String(pokemonId)];
-
-    // Evo-only: use base form level
-    if (level === undefined) {
-        const baseId = FAMILY_BASE[String(pokemonId)];
-        if (baseId && baseId !== pokemonId) {
-            level = POKEMON_LEVELS[String(baseId)];
-        }
-    }
-
-    if (level === undefined) return 0;
-
-    for (let i = 0; i < BADGE_LEVEL_THRESHOLDS.length; i++) {
-        if (level <= BADGE_LEVEL_THRESHOLDS[i]) return i;
-    }
-    return BADGE_LEVEL_THRESHOLDS.length;
+    return BADGE_REQUIREMENTS[String(pokemonId)] ?? 0;
 }
 
 /**

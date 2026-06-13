@@ -204,6 +204,32 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                                         </label>
                                         <label className="flex items-center justify-between p-3 bg-gray-800/30 border border-gray-700 rounded hover:bg-gray-800/50 transition-colors cursor-pointer group">
                                             <div className="flex items-center gap-2">
+                                                <LayoutGrid size={16} className="text-blue-400 group-hover:scale-110 transition-transform" />
+                                                <div>
+                                                    <div className="text-xs font-bold text-gray-200">Region Columns</div>
+                                                    <div className="text-[9px] text-gray-500">Override auto layout</div>
+                                                </div>
+                                            </div>
+                                            <select
+                                                value={uiSettings.dexGridColumns}
+                                                onChange={(e) => {
+                                                    const v = e.target.value;
+                                                    updateUiSettings({
+                                                        dexGridColumns: v === 'auto' ? 'auto' : (Number(v) as 1 | 2 | 3 | 4 | 5),
+                                                    });
+                                                }}
+                                                className="bg-gray-900 border border-gray-700 rounded text-xs text-gray-200 px-2 py-1 focus:ring-blue-500 focus:border-blue-500"
+                                            >
+                                                <option value="auto">Auto</option>
+                                                <option value="1">1</option>
+                                                <option value="2">2</option>
+                                                <option value="3">3</option>
+                                                <option value="4">4</option>
+                                                <option value="5">5</option>
+                                            </select>
+                                        </label>
+                                        <label className="flex items-center justify-between p-3 bg-gray-800/30 border border-gray-700 rounded hover:bg-gray-800/50 transition-colors cursor-pointer group">
+                                            <div className="flex items-center gap-2">
                                                 <LayoutGrid size={16} className="text-emerald-400 group-hover:scale-110 transition-transform" />
                                                 <div>
                                                     <div className="text-xs font-bold text-gray-200">Fit Regions</div>
@@ -296,6 +322,26 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                                                 </div>
                                             </div>
                                             <input type="checkbox" checked={uiSettings.silhouetteGlow} onChange={(e) => updateUiSettings({ silhouetteGlow: e.target.checked })} className="w-4 h-4 rounded border-gray-700 bg-gray-900 text-indigo-600 focus:ring-indigo-500" />
+                                        </label>
+                                    </div>
+                                </div>
+
+                                {/* Gameplay */}
+                                <div className="space-y-2 pt-2">
+                                    <label className="flex items-center gap-2 text-xs font-bold text-gray-300">
+                                        <div className="w-3.5 h-3.5 rounded-full bg-yellow-900 border border-yellow-700 opacity-70" />
+                                        Gameplay
+                                    </label>
+                                    <div className="grid gap-3 grid-cols-2">
+                                        <label className="flex items-center justify-between p-3 bg-gray-800/30 border border-gray-700 rounded hover:bg-gray-800/50 transition-colors cursor-pointer group">
+                                            <div className="flex items-center gap-2">
+                                                <div className="w-4 h-4 rounded-full bg-yellow-900 border border-yellow-700 opacity-60 group-hover:scale-110 transition-transform" />
+                                                <div>
+                                                    <div className="text-xs font-bold text-gray-200">Stop Auto-submit After Goal</div>
+                                                    <div className="text-[9px] text-gray-500">Once your goal is reached, only submit on Enter (no auto-submit)</div>
+                                                </div>
+                                            </div>
+                                            <input type="checkbox" checked={uiSettings.stopAutosubmitOnGoal} onChange={(e) => updateUiSettings({ stopAutosubmitOnGoal: e.target.checked })} className="w-4 h-4 rounded border-gray-700 bg-gray-900 text-yellow-600 focus:ring-yellow-500" />
                                         </label>
                                     </div>
                                 </div>

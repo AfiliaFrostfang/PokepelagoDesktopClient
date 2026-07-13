@@ -1,6 +1,6 @@
 # Pokepelago Client
 
-Welcome to the **[Pokepelago Desktop Client](https://github.com/AfiliaFrostfang/PokepelagoDesktopClient/)**, this is a modified fork of **[PokePelagoClient by dowlee](https://github.com/dowlle/PokepelagoClient) that adds electron to build a Desktop Webview Client.
+Welcome to the **[Pokepelago Desktop Client](https://github.com/AfiliaFrostfang/PokepelagoDesktopClient/)**, this is a modified fork of **[PokePelagoClient by dowlee](https://github.com/dowlle/PokepelagoClient)** that adds electron to build a Desktop Webview Client.
 
 This client allows you to play Pokepelago in a Webclient on your PC rather then needing to use your Browser.
 

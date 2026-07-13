@@ -11,6 +11,8 @@ This client allows you to play Pokepelago in a Webclient on your PC rather then 
 
 ## Compiling & Building
 
+**Currently on Windows is supported, but will see if I can wrap my head around making it compatible to compile on Linux as well**
+
 Make sure you have [Node.js](https://nodejs.org/) installed on your machine.
 
 1. **Clone the repository**:

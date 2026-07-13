@@ -73,7 +73,7 @@ The client includes an auto-guesser script designed for testing seed mathematica
 
 ### Contributing
 
-Feel free to open issues or submit pull requests if you want to improve the client's UI or add new tracking features!
+Feel free to open issues or submit pull requests if you want to improve the client or add better solutions, you may also fork it to build your own solution for other platforms etc.
 
 ## License
 

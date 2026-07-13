@@ -5,12 +5,17 @@ import tailwindcss from '@tailwindcss/vite'
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
+  const isDesktopBuild = env.VITE_DESKTOP === 'true'
+  const isStaticDeploy = env.GITHUB_ACTIONS === 'true' || env.DEPLOY_TARGET === 'beta'
+
   return {
-    // Use /PokepelagoClient/beta/ for beta deploys, /PokepelagoClient/ for main CI, / for localhost
-    base: env.DEPLOY_TARGET === 'beta'
-      ? '/PokepelagoClient/beta/'
-      : env.GITHUB_ACTIONS
-        ? '/PokepelagoClient/'
+    // Use local relative assets for Electron builds, GitHub Pages paths for deploys, and / for localhost
+    base: isDesktopBuild
+      ? './'
+      : isStaticDeploy
+        ? env.DEPLOY_TARGET === 'beta'
+          ? '/PokepelagoClient/beta/'
+          : '/PokepelagoClient/'
         : '/',
     plugins: [
       react(),

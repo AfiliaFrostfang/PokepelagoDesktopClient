@@ -1,25 +1,22 @@
 # Pokepelago Client
 
-Welcome to the **[Pokepelago Client](https://dowlle.github.io/PokepelagoClient/)**, the companion React web application for the Archipelago Pokepelago APWorld!
+Welcome to the **[Pokepelago Desktop Client](https://github.com/AfiliaFrostfang/PokepelagoDesktopClient/)**, this is a modified fork of **[PokePelagoClient by dowlee](https://github.com/dowlle/PokepelagoClient) that adds electron to build a Desktop Webview Client.
 
-This client allows you to visually track your progress, track your caught Pokémon, and interact with the Archipelago multiworld server in a highly polished, interactive Pokédex interface.
+This client allows you to play Pokepelago in a Webclient on your PC rather then needing to use your Browser.
 
-## Features
+## Installation
+1. Download the latest Setup [here](https://github.com/AfiliaFrostfang/PokepelagoDesktopClient/releases).
+2. Launch the Client from your Desktop.
+3. Follow along further down with How to Connect & How to Play.
 
-- **Archipelago Integration**: Connects directly to any Archipelago server using `archipelago.js`. 
-- **Real-time Sync**: Instantly receives items, type keys, and updates your Pokédex as you progress through your seed.
-- **Smart Logic Validations**: Prevents you from guessing Pokémon you haven't mathematically unlocked yet (e.g., requires specific Type Keys).
-- **Responsive Design**: Includes a masonry-style Pokédex or a traditional grid. 
-- **Visual Flourishes**: Features shiny variations, hints, and dynamic unlocking animations.
-
-## Setup & Installation
+## Compiling & Building
 
 Make sure you have [Node.js](https://nodejs.org/) installed on your machine.
 
 1. **Clone the repository**:
    ```bash
-   git clone https://github.com/dowlle/PokepelagoClient.git
-   cd PokepelagoClient
+   git clone https://github.com/AfiliaFrostfang/PokepelagoDesktopClient.git
+   cd PokepelagoDesktopClient
    ```
 
 2. **Install dependencies**:
@@ -27,31 +24,43 @@ Make sure you have [Node.js](https://nodejs.org/) installed on your machine.
    npm install
    ```
 
-3. **Start the development server**:
+3. **Run the desktop client locally**:
+   ```bash
+   npm run electron:dev
+   ```
+   This launches the app as a desktop window using local bundled assets, so no hosted production server is required.
+
+4. **Build a desktop package**:
+   ```bash
+   npm run electron:build
+   ```
+   The packaged app is written to the release directory for your platform.
+
+5. **Run the web build normally** (optional):
    ```bash
    npm run dev
    ```
 
-4. **Build for production**:
+6. **Build for production**:
    ```bash
    npm run build
    ```
 
 ## How to Connect
 
-> **Important:** This client runs in your web browser -- you do **not** launch it from the Archipelago Launcher.
+> **Important:** This client runs locally on your Machine -- you do **not** launch it from the Archipelago Launcher.
 
-1. Open the [Pokepelago Client](https://dowlle.github.io/PokepelagoClient/) in your browser (Chrome or Firefox recommended).
+1. Open your build Client or the installed [Pokepelago Desktop Client](https://github.com/AfiliaFrostfang/PokepelagoDesktopClient/releases) on your Machine.
 2. Enter your AP server address (hostname and port), your slot name, and password (if any).
 3. The client connects to the server via WebSocket. If your server uses HTTPS, the client will use a secure connection automatically.
 
 ## How to Play
 
 1. Start your Archipelago Server with the Pokepelago `.apworld` generated seed.
-2. Open the [Pokepelago Client](https://dowlle.github.io/PokepelagoClient/) in your browser.
+2. Open your build Client or the installed [Pokepelago Desktop Client](https://github.com/AfiliaFrostfang/PokepelagoDesktopClient/releases) on your Machine.
 3. Enter your **Hostname**, **Port**, and **Slot Name** (e.g., `AshKetchum`) in the connection prompt.
 4. Once connected, your `Oak's Lab` starting items will automatically sync.
-5. Use the input bar at the bottom to "guess" Pokémon names. 
+5. Use the input bar at the top to "guess" Pokémon names. 
 6. As you guess Pokémon and receive items from the multiworld, more Pokémon will become catchable!
 
 ## Debugging

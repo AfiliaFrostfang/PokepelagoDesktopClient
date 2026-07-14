@@ -38,7 +38,7 @@ Make sure you have [Node.js](https://nodejs.org/) installed on your machine.
    ```
    The packaged app is written to the `release` directory for your platform.
 
-   - Linux builds produce `AppImage` and `deb` packages.
+   - Running Electron Build produces `AppImage` and `deb` packages.
    - For best results, run `npm run electron:build` from a Linux environment (native Linux, WSL, or Docker).
 
 ## How to Connect

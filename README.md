@@ -11,7 +11,7 @@ This client allows you to play Pokepelago in a Webclient on your PC rather then 
 
 ## Compiling & Building
 
-**Currently only Windows is supported, but will see if I can wrap my head around making it compatible to compile on Linux as well.**
+**This project now supports Linux packaging as well.**
 
 Make sure you have [Node.js](https://nodejs.org/) installed on your machine.
 
@@ -36,7 +36,10 @@ Make sure you have [Node.js](https://nodejs.org/) installed on your machine.
    ```bash
    npm run electron:build
    ```
-   The packaged app is written to the release directory for your platform.
+   The packaged app is written to the `release` directory for your platform.
+
+   - Linux builds produce `AppImage` and `deb` packages.
+   - For best results, run `npm run electron:build` from a Linux environment (native Linux, WSL, or Docker).
 
 5. **Run the web build normally** (optional):
    ```bash

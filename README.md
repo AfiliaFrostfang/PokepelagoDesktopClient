@@ -41,16 +41,6 @@ Make sure you have [Node.js](https://nodejs.org/) installed on your machine.
    - Linux builds produce `AppImage` and `deb` packages.
    - For best results, run `npm run electron:build` from a Linux environment (native Linux, WSL, or Docker).
 
-5. **Run the web build normally** (optional):
-   ```bash
-   npm run dev
-   ```
-
-6. **Build for production**:
-   ```bash
-   npm run build
-   ```
-
 ## How to Connect
 
 > **Important:** This client runs locally on your Machine -- you do **not** launch it from the Archipelago Launcher.

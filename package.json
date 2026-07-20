@@ -3,7 +3,6 @@
   "private": true,
   "version": "0.6.3",
   "license": "AGPL-3.0-or-later",
-  "author": "Afilia Frostfang",
   "type": "module",
   "main": "electron/main.cjs",
   "scripts": {
@@ -84,8 +83,7 @@
       "target": [
         "AppImage",
         "deb"
-      ],
-      "maintainer": "Afilia Frostfang <noreply@localhost>"
+      ]
     }
   },
   "allowScripts": {

@@ -2,6 +2,7 @@
   "name": "pokepelago",
   "private": true,
   "version": "0.6.3a",
+  "author": "Afilia Frostfang <maintainer@afiliafrostfang.de>",
   "license": "AGPL-3.0-or-later",
   "type": "module",
   "main": "electron/main.cjs",

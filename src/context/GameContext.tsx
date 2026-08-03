@@ -13,6 +13,8 @@ import { buildEffectiveGates, type ServerGateCategories } from '../data/gateCate
 import { getRouteKeysForPokemon, getLineUnlockForPokemon, getBadgeRequirement, ROUTE_KEY_ITEMS, ROUTE_INFO, ROUTE_POKEMON } from '../data/routeData';
 import { decodeRouteKey, decodeLineUnlock, decodeTypeKey, decodeRegionPass } from '../data/itemDecoding';
 import { verifySeedCompletable } from '../utils/verifySeedCompletable';
+import { getNewlyGuessablePokemon, shouldPlayProgressiveItemSound } from '../utils/audioTriggers';
+import { getSoundSourceOrDefault } from '../utils/audio';
 import type { OffsetTable } from '../hooks/useOffsets';
 import type { MutableRefObject } from 'react';
 import { useAPConnection } from '../hooks/useAPConnection';
@@ -26,6 +28,41 @@ import { PokemonSlotContext, type PokemonSlotContextValue } from './PokemonSlotC
 function safeSetItem(key: string, value: string): void {
     try { localStorage.setItem(key, value); }
     catch { console.warn(`[localStorage] Failed to write key "${key}" (quota exceeded?)`); }
+}
+
+function buildAudioElement(src: string | null): HTMLAudioElement | null {
+    if (!src) return null;
+    try {
+        const audio = new Audio(src);
+        audio.preload = 'auto';
+        audio.load();
+        audio.onerror = () => {
+            console.warn('[Audio] Failed to load audio source:', src, audio.error?.message || audio.error);
+        };
+        return audio;
+    } catch (error) {
+        console.warn('[Audio] buildAudioElement failed for source:', src, error);
+        return null;
+    }
+}
+
+function playAudioElement(audio: HTMLAudioElement | null): void {
+    if (!audio) {
+        console.warn('[Audio] playAudioElement called with null audio element');
+        return;
+    }
+
+    try {
+        audio.currentTime = 0;
+        const promise = audio.play();
+        if (promise instanceof Promise) {
+            promise.catch((error) => {
+                console.warn('[Audio] Playback failed:', error, 'source=', audio.src);
+            });
+        }
+    } catch (error) {
+        console.warn('[Audio] Playback exception:', error, 'source=', audio.src);
+    }
 }
 
 // PERF-07: coalesce high-frequency persistence writes (e.g. the caught set, which used to
@@ -150,6 +187,10 @@ export interface UISettings {
     // (existing behavior). A specific number overrides to that count, capped
     // at activeCount so empty cells aren't rendered.
     dexGridColumns: 'auto' | 1 | 2 | 3 | 4 | 5;
+    playGuessableSound: boolean;
+    guessableSoundSource: string;
+    playProgressiveItemSound: boolean;
+    progressiveItemSoundSource: string;
 }
 
 interface ConnectionInfo {
@@ -384,6 +425,10 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
             silhouetteGlow: true,
             stopAutosubmitOnGoal: false,
             dexGridColumns: 'auto',
+            playGuessableSound: false,
+            guessableSoundSource: '',
+            playProgressiveItemSound: false,
+            progressiveItemSoundSource: '',
         };
         if (saved) {
             try {
@@ -433,6 +478,10 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const isPokemonGuessableRef = useRef<any>(null);
     const connectionInfoRef = useRef(connectionInfo);
     const gameModeRef = useRef(gameMode);
+    const guessableAudioRef = useRef<HTMLAudioElement | null>(null);
+    const progressiveItemAudioRef = useRef<HTMLAudioElement | null>(null);
+    const previousGuessableIdsRef = useRef<Set<number>>(new Set());
+    const guessableAudioInitializedRef = useRef(false);
     useEffect(() => { checkedIdsRef.current = checkedIds; }, [checkedIds]);
     useEffect(() => { connectionInfoRef.current = connectionInfo; }, [connectionInfo]);
     useEffect(() => { gameModeRef.current = gameMode; }, [gameMode]);
@@ -572,6 +621,14 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     useEffect(() => {
         safeSetItem('pokepelago_ui', JSON.stringify(uiSettings));
     }, [uiSettings]);
+
+    useEffect(() => {
+        guessableAudioRef.current = buildAudioElement(getSoundSourceOrDefault(uiSettings.guessableSoundSource));
+    }, [uiSettings.guessableSoundSource]);
+
+    useEffect(() => {
+        progressiveItemAudioRef.current = buildAudioElement(getSoundSourceOrDefault(uiSettings.progressiveItemSoundSource));
+    }, [uiSettings.progressiveItemSoundSource]);
 
     // Apply theme CSS variables whenever the theme setting changes
     useEffect(() => {
@@ -984,6 +1041,30 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }, [isPokemonGuessableImpl]);
 
     useEffect(() => { isPokemonGuessableRef.current = isPokemonGuessable; }, [isPokemonGuessable]);
+
+    useEffect(() => {
+        if (!uiSettings.playGuessableSound) {
+            previousGuessableIdsRef.current = new Set();
+            guessableAudioInitializedRef.current = false;
+            return;
+        }
+
+        const nextGuessable = new Set<number>();
+        for (const pokemon of allPokemon) {
+            if (checkedIds.has(pokemon.id) || releasedIds.has(pokemon.id)) continue;
+            if (isPokemonGuessable(pokemon.id).canGuess) nextGuessable.add(pokemon.id);
+        }
+
+        if (guessableAudioInitializedRef.current) {
+            const added = getNewlyGuessablePokemon(previousGuessableIdsRef.current, nextGuessable)[0];
+            if (added !== undefined) {
+                playAudioElement(guessableAudioRef.current);
+            }
+        }
+
+        guessableAudioInitializedRef.current = true;
+        previousGuessableIdsRef.current = nextGuessable;
+    }, [allPokemon, checkedIds, releasedIds, isPokemonGuessable, uiSettings.playGuessableSound, uiSettings.guessableSoundSource]);
 
     const getLocationName = useCallback((locationId: number) => {
         let name: string | undefined;
@@ -1676,6 +1757,23 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (ultraWormhole) setHasUltraWormhole(true);
         if (timeRift) setHasTimeRift(true);
         if (fossilRestorer) setHasFossilRestorer(true);
+
+        const shouldPlayProgressiveItemSoundEffect = uiSettings.playProgressiveItemSound && shouldPlayProgressiveItemSound({
+            stonesAdd,
+            typesAdd,
+            regionsAdd,
+            routeKeysAdd,
+            lineUnlocksAdd,
+            gymBadgeDelta,
+            daycareDelta,
+            linkCable,
+            ultraWormhole,
+            timeRift,
+            fossilRestorer,
+        });
+        if (shouldPlayProgressiveItemSoundEffect) {
+            playAudioElement(progressiveItemAudioRef.current);
+        }
 
         // Shiny Charm: pick N distinct caught Pokemon in one pass. Uses checkedIdsRef
         // (kept in sync via useEffect at line 393) instead of the old setCheckedIds →

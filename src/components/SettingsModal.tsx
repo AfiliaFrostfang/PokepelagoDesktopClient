@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Image, Trash2, Upload, Link2, Monitor, Maximize, LayoutGrid, Tv, LogIn, LogOut, Palette, Settings } from 'lucide-react';
+import { X, Image, Trash2, Upload, Link2, Monitor, Maximize, LayoutGrid, Tv, LogIn, LogOut, Palette, Settings, Volume2 } from 'lucide-react';
 import { useGame } from '../context/GameContext';
 import { importFromFiles, clearAllSprites } from '../services/spriteService';
 import { getTwitchAuthUrl, getTwitchUsername, clearTwitchAuth, hasTwitchClientId } from '../services/twitchAuthService';
@@ -8,7 +8,7 @@ import { THEMES } from '../utils/themes';
 import type { ThemeId } from '../utils/themes';
 import { ObsOverlayBuilder } from './settings/ObsOverlayBuilder';
 
-type SettingsTab = 'interface' | 'sprites' | 'twitch';
+type SettingsTab = 'interface' | 'sprites' | 'audio' | 'twitch';
 
 interface SettingsModalProps {
     isOpen: boolean;
@@ -54,7 +54,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
     React.useEffect(() => {
         const handler = (e: Event) => {
             const section = (e as CustomEvent).detail as string;
-            if (section === 'interface' || section === 'sprites' || section === 'twitch') {
+            if (section === 'interface' || section === 'sprites' || section === 'audio' || section === 'twitch') {
                 setActiveTab(section);
             }
         };
@@ -96,6 +96,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
     const tabs: Array<{ key: SettingsTab; label: string; icon: React.ReactNode; visible: boolean; badge?: React.ReactNode }> = [
         { key: 'interface', label: 'Interface', icon: <Monitor size={14} />, visible: true },
         { key: 'sprites', label: 'Sprites', icon: <Image size={14} />, visible: true, badge: spriteCount > 0 ? <span className="text-[9px] text-yellow-400 bg-yellow-900/20 px-1.5 py-0.5 rounded border border-yellow-700/30">{spriteCount}</span> : undefined },
+        { key: 'audio', label: 'Audio', icon: <Volume2 size={14} />, visible: true },
         { key: 'twitch', label: 'Twitch', icon: <Tv size={14} />, visible: twitchIntegration, badge: twitchEnabled && twitchChannel ? <span className="text-[9px] text-purple-400 bg-purple-900/20 px-1.5 py-0.5 rounded border border-purple-700/30">Active</span> : undefined },
     ];
 
@@ -386,6 +387,63 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                                     >
                                         Reset Game Mode
                                     </button>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Audio tab */}
+                        {activeTab === 'audio' && (
+                            <div className="space-y-4">
+                                <div className="rounded-xl border border-gray-800 bg-gray-900/40 p-4 space-y-3">
+                                    <div>
+                                        <div className="text-xs font-bold text-gray-200">Custom Sounds</div>
+                                        <div className="text-[10px] text-gray-500">A bundled default sound is already available. You can replace it with your own uploads here.</div>
+                                    </div>
+
+                                    <label className="flex items-center justify-between p-3 bg-gray-800/40 border border-gray-700 rounded hover:bg-gray-800/60 transition-colors cursor-pointer">
+                                        <div>
+                                            <div className="text-[11px] font-semibold text-gray-200">Play when a Pokémon becomes guessable</div>
+                                            <div className="text-[9px] text-gray-500">Enable the notification for newly unlockable Pokémon.</div>
+                                        </div>
+                                        <input type="checkbox" checked={uiSettings.playGuessableSound} onChange={(e) => updateUiSettings({ playGuessableSound: e.target.checked })} className="w-4 h-4 rounded border-gray-700 bg-gray-900 text-cyan-600 focus:ring-cyan-500" />
+                                    </label>
+                                    <label className="flex items-center justify-between p-3 bg-gray-800/40 border border-gray-700 rounded hover:bg-gray-800/60 transition-colors cursor-pointer">
+                                        <div>
+                                            <div className="text-[11px] font-semibold text-gray-200">Play for progressive item unlocks</div>
+                                            <div className="text-[9px] text-gray-500">Enable the notification for badges, passes, and other progression rewards.</div>
+                                        </div>
+                                        <input type="checkbox" checked={uiSettings.playProgressiveItemSound} onChange={(e) => updateUiSettings({ playProgressiveItemSound: e.target.checked })} className="w-4 h-4 rounded border-gray-700 bg-gray-900 text-cyan-600 focus:ring-cyan-500" />
+                                    </label>
+
+                                    <div className="space-y-2">
+                                        <label className="text-[11px] font-semibold text-gray-300">Guessable sound</label>
+                                        <input type="file" accept="audio/*" onChange={(e) => {
+                                            const file = e.target.files?.[0];
+                                            if (!file) return;
+                                            const reader = new FileReader();
+                                            reader.onload = () => {
+                                                if (typeof reader.result === 'string') {
+                                                    updateUiSettings({ guessableSoundSource: reader.result });
+                                                }
+                                            };
+                                            reader.readAsDataURL(file);
+                                        }} className="w-full rounded-lg border border-gray-700 bg-gray-900/70 px-3 py-2 text-[11px] text-gray-300" />
+                                    </div>
+
+                                    <div className="space-y-2">
+                                        <label className="text-[11px] font-semibold text-gray-300">Progressive-item sound</label>
+                                        <input type="file" accept="audio/*" onChange={(e) => {
+                                            const file = e.target.files?.[0];
+                                            if (!file) return;
+                                            const reader = new FileReader();
+                                            reader.onload = () => {
+                                                if (typeof reader.result === 'string') {
+                                                    updateUiSettings({ progressiveItemSoundSource: reader.result });
+                                                }
+                                            };
+                                            reader.readAsDataURL(file);
+                                        }} className="w-full rounded-lg border border-gray-700 bg-gray-900/70 px-3 py-2 text-[11px] text-gray-300" />
+                                    </div>
                                 </div>
                             </div>
                         )}

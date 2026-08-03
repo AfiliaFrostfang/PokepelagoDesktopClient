@@ -14,7 +14,7 @@ import { getRouteKeysForPokemon, getLineUnlockForPokemon, getBadgeRequirement, R
 import { decodeRouteKey, decodeLineUnlock, decodeTypeKey, decodeRegionPass } from '../data/itemDecoding';
 import { verifySeedCompletable } from '../utils/verifySeedCompletable';
 import { getNewlyGuessablePokemon, shouldPlayProgressiveItemSound } from '../utils/audioTriggers';
-import { getSoundSourceOrDefault } from '../utils/audio';
+import { DEFAULT_AUDIO_NOTIFICATION_SETTINGS, getGuessableSoundSourceOrDefault, getProgressiveItemSoundSourceOrDefault, shouldPlaySoundAfterCooldown } from '../utils/audio';
 import type { OffsetTable } from '../hooks/useOffsets';
 import type { MutableRefObject } from 'react';
 import { useAPConnection } from '../hooks/useAPConnection';
@@ -425,9 +425,9 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
             silhouetteGlow: true,
             stopAutosubmitOnGoal: false,
             dexGridColumns: 'auto',
-            playGuessableSound: false,
+            playGuessableSound: DEFAULT_AUDIO_NOTIFICATION_SETTINGS.playGuessableSound,
             guessableSoundSource: '',
-            playProgressiveItemSound: false,
+            playProgressiveItemSound: DEFAULT_AUDIO_NOTIFICATION_SETTINGS.playProgressiveItemSound,
             progressiveItemSoundSource: '',
         };
         if (saved) {
@@ -480,6 +480,8 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const gameModeRef = useRef(gameMode);
     const guessableAudioRef = useRef<HTMLAudioElement | null>(null);
     const progressiveItemAudioRef = useRef<HTMLAudioElement | null>(null);
+    const lastGuessableSoundAtRef = useRef<number | null>(null);
+    const lastProgressiveItemSoundAtRef = useRef<number | null>(null);
     const previousGuessableIdsRef = useRef<Set<number>>(new Set());
     const guessableAudioInitializedRef = useRef(false);
     useEffect(() => { checkedIdsRef.current = checkedIds; }, [checkedIds]);
@@ -623,11 +625,11 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }, [uiSettings]);
 
     useEffect(() => {
-        guessableAudioRef.current = buildAudioElement(getSoundSourceOrDefault(uiSettings.guessableSoundSource));
+        guessableAudioRef.current = buildAudioElement(getGuessableSoundSourceOrDefault(uiSettings.guessableSoundSource));
     }, [uiSettings.guessableSoundSource]);
 
     useEffect(() => {
-        progressiveItemAudioRef.current = buildAudioElement(getSoundSourceOrDefault(uiSettings.progressiveItemSoundSource));
+        progressiveItemAudioRef.current = buildAudioElement(getProgressiveItemSoundSourceOrDefault(uiSettings.progressiveItemSoundSource));
     }, [uiSettings.progressiveItemSoundSource]);
 
     // Apply theme CSS variables whenever the theme setting changes
@@ -1058,7 +1060,11 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (guessableAudioInitializedRef.current) {
             const added = getNewlyGuessablePokemon(previousGuessableIdsRef.current, nextGuessable)[0];
             if (added !== undefined) {
-                playAudioElement(guessableAudioRef.current);
+                const now = Date.now();
+                if (shouldPlaySoundAfterCooldown(lastGuessableSoundAtRef.current, now)) {
+                    lastGuessableSoundAtRef.current = now;
+                    playAudioElement(guessableAudioRef.current);
+                }
             }
         }
 
@@ -1772,7 +1778,11 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
             fossilRestorer,
         });
         if (shouldPlayProgressiveItemSoundEffect) {
-            playAudioElement(progressiveItemAudioRef.current);
+            const now = Date.now();
+            if (shouldPlaySoundAfterCooldown(lastProgressiveItemSoundAtRef.current, now)) {
+                lastProgressiveItemSoundAtRef.current = now;
+                playAudioElement(progressiveItemAudioRef.current);
+            }
         }
 
         // Shiny Charm: pick N distinct caught Pokemon in one pass. Uses checkedIdsRef

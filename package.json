@@ -14,7 +14,10 @@
     "test": "vitest",
     "test:run": "vitest run",
     "electron:dev": "concurrently -k \"npm run dev\" \"wait-on http://localhost:5173 && electron . --dev\"",
-    "electron:build": "cross-env VITE_DESKTOP=true npm run build && electron-builder"
+    "electron:build": "cross-env VITE_DESKTOP=true npm run build && electron-builder",
+    "electron:win": "cross-env VITE_DESKTOP=true npm run build && electron-builder --win",
+    "electron:linux": "cross-env VITE_DESKTOP=true npm run build && electron-builder --linux",
+    "electron:mac": "cross-env VITE_DESKTOP=true npm run build && electron-builder --mac"
   },
   "dependencies": {
     "@types/canvas-confetti": "1.9.0",
@@ -39,7 +42,7 @@
     "@vitejs/plugin-react": "5.1.4",
     "autoprefixer": "10.4.27",
     "concurrently": "10.0.3",
-    "cross-env": "10.1.0",
+    "cross-env": "^10.1.0",
     "electron": "43.1.0",
     "electron-builder": "26.15.3",
     "eslint": "9.39.3",
@@ -77,6 +80,7 @@
     },
     "mac": {
       "target": [
+        "zip",
         "dmg"
       ]
     },

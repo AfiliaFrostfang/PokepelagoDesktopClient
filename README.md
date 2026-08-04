@@ -34,8 +34,9 @@ Make sure you have [Node.js](https://nodejs.org/) installed on your machine.
 
 4. **Build a desktop package**:
 
-   As of version 0.6.3a, building has been changed to a cleaner and more user-friendly approach.
-   Electron now has dedicated commands for each OS environment.
+   As of version 0.6.3a, building now uses a cleaner, more user-friendly approach.
+   Electron has dedicated commands for each OS.
+
    The packaged app is output to the `release/` folder (for example: `D:\PokepelagoDesktopClient\release`).
 
    **Building for Windows:**
@@ -56,7 +57,7 @@ Make sure you have [Node.js](https://nodejs.org/) installed on your machine.
    npm run electron:mac
    ```
 
-   > Note: It is highly recommended to use an actual macOS environment or a workflow such as GitHub Actions to create a properly signed `.dmg` file.
+   > Note: It is highly recommended to build macOS packages on a real macOS machine or via GitHub Actions to get a properly signed `.dmg` file.
 
 ## How to Connect
 

@@ -30,16 +30,32 @@ Make sure you have [Node.js](https://nodejs.org/) installed on your machine.
    ```bash
    npm run electron:dev
    ```
-   This launches the app as a desktop window using local bundled assets, so no hosted production server is required.
+   This builds a development environment locally and runs it, useful for debugging and bug reproduction.
 
 4. **Build a desktop package**:
-   ```bash
-   npm run electron:build
-   ```
-   The packaged app is written to the `release` directory for your platform.
+   
+   As of Version 0.6.3a building has been changed to a more clean and user-friendly approach.
+   Electron now has dedicated Commands for Each OS Environment.
+   The Packaged App will always be output to */release/ (i.e: D:PokepelagoDesktopClient/release).
 
-   - Running Electron Build can produce `AppImage` and `deb` packages.
-   - For best results, run `npm run electron:build` from a Linux environment (native Linux, WSL, or Docker).
+   **Building for Windows:**
+
+   ```bash
+   npm run electron:win
+   ```
+
+   **Building for Linux:**
+
+   ```bash
+   npm run electron:linux
+   ```
+
+   **Building for MacOS** 
+   Note: It is highly recommended to use an actual MacOS environment or a Workflow like Git Actions, as you otherwise will not gain a properly signed .dmg File
+
+   ```bash
+   npm run electron:mac
+   ```
 
 ## How to Connect
 

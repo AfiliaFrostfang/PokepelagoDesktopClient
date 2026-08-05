@@ -2,9 +2,6 @@ name: Build other OS
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
 
 jobs:
   linux:

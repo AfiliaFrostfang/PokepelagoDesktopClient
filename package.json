@@ -1,7 +1,7 @@
 {
   "name": "pokepelago",
   "private": true,
-  "version": "0.6.3a",
+  "version": "0.6.3b",
   "author": "Afilia Frostfang <maintainer@afiliafrostfang.de>",
   "license": "AGPL-3.0-or-later",
   "type": "module",

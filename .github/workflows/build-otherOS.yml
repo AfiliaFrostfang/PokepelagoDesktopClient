@@ -1,0 +1,49 @@
+name: Build other OS
+
+on:
+  workflow_dispatch:
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Linux
+        run: npm run electron:linux -- --publish never
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Pokepelago-Linux
+          path: release/
+
+  macos:
+    runs-on: macos-latest
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build macOS
+        run: npm run electron:mac -- --publish never
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Pokepelago-macOS
+          path: release/

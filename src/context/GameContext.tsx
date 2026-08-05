@@ -484,6 +484,8 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const lastProgressiveItemSoundAtRef = useRef<number | null>(null);
     const previousGuessableIdsRef = useRef<Set<number>>(new Set());
     const guessableAudioInitializedRef = useRef(false);
+    const uiSettingsRef = useRef<UISettings>(uiSettings);
+    useEffect(() => { uiSettingsRef.current = uiSettings; }, [uiSettings]);
     useEffect(() => { checkedIdsRef.current = checkedIds; }, [checkedIds]);
     useEffect(() => { connectionInfoRef.current = connectionInfo; }, [connectionInfo]);
     useEffect(() => { gameModeRef.current = gameMode; }, [gameMode]);
@@ -1764,7 +1766,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (timeRift) setHasTimeRift(true);
         if (fossilRestorer) setHasFossilRestorer(true);
 
-        const shouldPlayProgressiveItemSoundEffect = uiSettings.playProgressiveItemSound && shouldPlayProgressiveItemSound({
+        const shouldPlayProgressiveItemSoundEffect = uiSettingsRef.current.playProgressiveItemSound && shouldPlayProgressiveItemSound({
             stonesAdd,
             typesAdd,
             regionsAdd,

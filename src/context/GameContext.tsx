@@ -634,13 +634,6 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }, [uiSettings]);
 
     useEffect(() => {
-<<<<<<< HEAD
-        guessableAudioRef.current = buildAudioElement(getGuessableSoundSourceOrDefault(uiSettings.guessableSoundSource));
-    }, [uiSettings.guessableSoundSource]);
-
-    useEffect(() => {
-        progressiveItemAudioRef.current = buildAudioElement(getProgressiveItemSoundSourceOrDefault(uiSettings.progressiveItemSoundSource));
-=======
         let cancelled = false;
         let objectUrl: string | null = null;
         void resolveAudioSource('guessable', uiSettings.guessableSoundSource, getGuessableSoundSourceOrDefault('')).then((resolved) => {
@@ -672,7 +665,6 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
             cancelled = true;
             if (objectUrl) URL.revokeObjectURL(objectUrl);
         };
->>>>>>> upstream/main
     }, [uiSettings.progressiveItemSoundSource]);
 
     // Apply theme CSS variables whenever the theme setting changes

@@ -11,7 +11,7 @@ import { loadDerpemonIndex, type DerpemonIndex } from '../services/derpemonServi
 import { STONE_NAMES_ORDERED } from '../data/pokemon_gates';
 import { buildEffectiveGates, type ServerGateCategories } from '../data/gateCategories';
 import { getRouteKeysForPokemon, getLineUnlockForPokemon, getBadgeRequirement, ROUTE_KEY_ITEMS, ROUTE_INFO, ROUTE_POKEMON } from '../data/routeData';
-import { decodeRouteKey, decodeLineUnlock, decodeTypeKey, decodeRegionPass } from '../data/itemDecoding';
+import { decodeRouteKey, decodeLineUnlock, decodeTypeKey, decodeRegionPass, decodeUsefulItem } from '../data/itemDecoding';
 import { verifySeedCompletable } from '../utils/verifySeedCompletable';
 import { getNewlyGuessablePokemon, shouldPlayProgressiveItemSound } from '../utils/audioTriggers';
 import { DEFAULT_AUDIO_NOTIFICATION_SETTINGS, getGuessableSoundSourceOrDefault, getProgressiveItemSoundSourceOrDefault, shouldPlaySoundAfterCooldown } from '../utils/audio';
@@ -23,6 +23,7 @@ import { useGoalChecker } from '../hooks/useGoalChecker';
 import { useTrapHandler } from '../hooks/useTrapHandler';
 import { applyTheme } from '../utils/themes';
 import { PokemonSlotContext, type PokemonSlotContextValue } from './PokemonSlotContext';
+import { getCustomSound, isCustomSoundMarker, type CustomSoundKind } from '../services/audioService';
 
 /** localStorage.setItem wrapped in try/catch to handle QuotaExceededError gracefully. */
 function safeSetItem(key: string, value: string): void {
@@ -63,6 +64,12 @@ function playAudioElement(audio: HTMLAudioElement | null): void {
     } catch (error) {
         console.warn('[Audio] Playback exception:', error, 'source=', audio.src);
     }
+}
+
+async function resolveAudioSource(kind: CustomSoundKind, configuredSource: string, fallbackSource: string): Promise<{ src: string; objectUrl: boolean }> {
+    if (!isCustomSoundMarker(configuredSource)) return { src: fallbackSource, objectUrl: false };
+    const blob = await getCustomSound(kind);
+    return blob ? { src: URL.createObjectURL(blob), objectUrl: true } : { src: fallbackSource, objectUrl: false };
 }
 
 // PERF-07: coalesce high-frequency persistence writes (e.g. the caught set, which used to
@@ -627,11 +634,45 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }, [uiSettings]);
 
     useEffect(() => {
+<<<<<<< HEAD
         guessableAudioRef.current = buildAudioElement(getGuessableSoundSourceOrDefault(uiSettings.guessableSoundSource));
     }, [uiSettings.guessableSoundSource]);
 
     useEffect(() => {
         progressiveItemAudioRef.current = buildAudioElement(getProgressiveItemSoundSourceOrDefault(uiSettings.progressiveItemSoundSource));
+=======
+        let cancelled = false;
+        let objectUrl: string | null = null;
+        void resolveAudioSource('guessable', uiSettings.guessableSoundSource, getGuessableSoundSourceOrDefault('')).then((resolved) => {
+            if (cancelled) {
+                if (resolved.objectUrl) URL.revokeObjectURL(resolved.src);
+                return;
+            }
+            if (resolved.objectUrl) objectUrl = resolved.src;
+            guessableAudioRef.current = buildAudioElement(resolved.src);
+        });
+        return () => {
+            cancelled = true;
+            if (objectUrl) URL.revokeObjectURL(objectUrl);
+        };
+    }, [uiSettings.guessableSoundSource]);
+
+    useEffect(() => {
+        let cancelled = false;
+        let objectUrl: string | null = null;
+        void resolveAudioSource('progressive', uiSettings.progressiveItemSoundSource, getProgressiveItemSoundSourceOrDefault('')).then((resolved) => {
+            if (cancelled) {
+                if (resolved.objectUrl) URL.revokeObjectURL(resolved.src);
+                return;
+            }
+            if (resolved.objectUrl) objectUrl = resolved.src;
+            progressiveItemAudioRef.current = buildAudioElement(resolved.src);
+        });
+        return () => {
+            cancelled = true;
+            if (objectUrl) URL.revokeObjectURL(objectUrl);
+        };
+>>>>>>> upstream/main
     }, [uiSettings.progressiveItemSoundSource]);
 
     // Apply theme CSS variables whenever the theme setting changes
@@ -1556,13 +1597,13 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
             if (!Array.isArray(value)) return;
             const usedIds = new Set(validIds(value));
             if (key === mbKey) {
-                const total = client.items.received.filter(i => i.id === o.ITEM_OFFSET + o.USEFUL_ITEM_OFFSET + 1).length;
+                const total = client.items.received.filter(i => decodeUsefulItem(i.id, o) === 'Master Ball').length;
                 setMasterBalls(Math.max(0, total - usedIds.size)); setUsedMasterBalls(usedIds);
             } else if (key === pgKey) {
-                const total = client.items.received.filter(i => i.id === o.ITEM_OFFSET + o.USEFUL_ITEM_OFFSET + 2).length;
+                const total = client.items.received.filter(i => decodeUsefulItem(i.id, o) === 'Pokegear').length;
                 setPokegears(Math.max(0, total - usedIds.size)); setUsedPokegears(usedIds);
             } else if (key === pdKey) {
-                const total = client.items.received.filter(i => i.id === o.ITEM_OFFSET + o.USEFUL_ITEM_OFFSET + 3).length;
+                const total = client.items.received.filter(i => decodeUsefulItem(i.id, o) === 'Pokedex').length;
                 setPokedexes(Math.max(0, total - usedIds.size)); setUsedPokedexes(usedIds);
             } else if (key === derpKey) {
                 onDataStorageDerpUpdate(validIds(value));
@@ -1581,9 +1622,9 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
             const pgUsed = new Set(validIds(data[pgKey] ?? []));
             const pdUsed = new Set(validIds(data[pdKey] ?? []));
 
-            const mbTotal = client.items.received.filter(i => i.id === o.ITEM_OFFSET + o.USEFUL_ITEM_OFFSET + 1).length;
-            const pgTotal = client.items.received.filter(i => i.id === o.ITEM_OFFSET + o.USEFUL_ITEM_OFFSET + 2).length;
-            const pdTotal = client.items.received.filter(i => i.id === o.ITEM_OFFSET + o.USEFUL_ITEM_OFFSET + 3).length;
+            const mbTotal = client.items.received.filter(i => decodeUsefulItem(i.id, o) === 'Master Ball').length;
+            const pgTotal = client.items.received.filter(i => decodeUsefulItem(i.id, o) === 'Pokegear').length;
+            const pdTotal = client.items.received.filter(i => decodeUsefulItem(i.id, o) === 'Pokedex').length;
 
             setMasterBalls(Math.max(0, mbTotal - mbUsed.size));
             setUsedMasterBalls(mbUsed);
@@ -1705,9 +1746,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 item.id === o.ITEM_OFFSET + o.TRAP_ITEM_OFFSET + 2 ||
                 item.id === o.ITEM_OFFSET + o.TRAP_ITEM_OFFSET + 3 ||
                 item.id === o.ITEM_OFFSET + o.TRAP_ITEM_OFFSET + 4 ||
-                item.id === o.ITEM_OFFSET + o.USEFUL_ITEM_OFFSET + 1 ||
-                item.id === o.ITEM_OFFSET + o.USEFUL_ITEM_OFFSET + 2 ||
-                item.id === o.ITEM_OFFSET + o.USEFUL_ITEM_OFFSET + 3
+                decodeUsefulItem(item.id, o) !== null
             ) {
                 recalculateItems = true;
             }
@@ -1833,9 +1872,9 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
 
         if (recalculateItems) {
-            setUsedMasterBalls(used => { setMasterBalls(Math.max(0, client.items.received.filter(i => i.id === o.ITEM_OFFSET + o.USEFUL_ITEM_OFFSET + 1).length - used.size)); return used; });
-            setUsedPokegears(used => { setPokegears(Math.max(0, client.items.received.filter(i => i.id === o.ITEM_OFFSET + o.USEFUL_ITEM_OFFSET + 2).length - used.size)); return used; });
-            setUsedPokedexes(used => { setPokedexes(Math.max(0, client.items.received.filter(i => i.id === o.ITEM_OFFSET + o.USEFUL_ITEM_OFFSET + 3).length - used.size)); return used; });
+            setUsedMasterBalls(used => { setMasterBalls(Math.max(0, client.items.received.filter(i => decodeUsefulItem(i.id, o) === 'Master Ball').length - used.size)); return used; });
+            setUsedPokegears(used => { setPokegears(Math.max(0, client.items.received.filter(i => decodeUsefulItem(i.id, o) === 'Pokegear').length - used.size)); return used; });
+            setUsedPokedexes(used => { setPokedexes(Math.max(0, client.items.received.filter(i => decodeUsefulItem(i.id, o) === 'Pokedex').length - used.size)); return used; });
             processTrapItems(items, client);
         }
     }, [processTrapItems]);

@@ -7,6 +7,7 @@ import { getTwitchAuthUrl, getTwitchUsername, clearTwitchAuth, hasTwitchClientId
 import { THEMES } from '../utils/themes';
 import type { ThemeId } from '../utils/themes';
 import { ObsOverlayBuilder } from './settings/ObsOverlayBuilder';
+import { clearCustomSound, customSoundMarker, saveCustomSound, type CustomSoundKind } from '../services/audioService';
 
 type SettingsTab = 'interface' | 'sprites' | 'audio' | 'twitch';
 
@@ -89,6 +90,21 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
             await clearAllSprites();
             await refreshSpriteCount();
         }
+    };
+
+    const handleSoundUpload = async (kind: CustomSoundKind, file: File) => {
+        await saveCustomSound(kind, file);
+        const marker = customSoundMarker();
+        updateUiSettings(kind === 'guessable'
+            ? { guessableSoundSource: marker }
+            : { progressiveItemSoundSource: marker });
+    };
+
+    const handleSoundReset = async (kind: CustomSoundKind) => {
+        await clearCustomSound(kind);
+        updateUiSettings(kind === 'guessable'
+            ? { guessableSoundSource: '' }
+            : { progressiveItemSoundSource: '' });
     };
 
     if (!isOpen) return null;
@@ -420,14 +436,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                                         <input type="file" accept="audio/*" onChange={(e) => {
                                             const file = e.target.files?.[0];
                                             if (!file) return;
-                                            const reader = new FileReader();
-                                            reader.onload = () => {
-                                                if (typeof reader.result === 'string') {
-                                                    updateUiSettings({ guessableSoundSource: reader.result });
-                                                }
-                                            };
-                                            reader.readAsDataURL(file);
+                                            void handleSoundUpload('guessable', file);
                                         }} className="w-full rounded-lg border border-gray-700 bg-gray-900/70 px-3 py-2 text-[11px] text-gray-300" />
+                                        {uiSettings.guessableSoundSource && (
+                                            <button type="button" onClick={() => void handleSoundReset('guessable')} className="text-[10px] text-cyan-400 hover:text-cyan-300">Use bundled default</button>
+                                        )}
                                     </div>
 
                                     <div className="space-y-2">
@@ -435,14 +448,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                                         <input type="file" accept="audio/*" onChange={(e) => {
                                             const file = e.target.files?.[0];
                                             if (!file) return;
-                                            const reader = new FileReader();
-                                            reader.onload = () => {
-                                                if (typeof reader.result === 'string') {
-                                                    updateUiSettings({ progressiveItemSoundSource: reader.result });
-                                                }
-                                            };
-                                            reader.readAsDataURL(file);
+                                            void handleSoundUpload('progressive', file);
                                         }} className="w-full rounded-lg border border-gray-700 bg-gray-900/70 px-3 py-2 text-[11px] text-gray-300" />
+                                        {uiSettings.progressiveItemSoundSource && (
+                                            <button type="button" onClick={() => void handleSoundReset('progressive')} className="text-[10px] text-cyan-400 hover:text-cyan-300">Use bundled default</button>
+                                        )}
                                     </div>
                                 </div>
                             </div>
@@ -681,16 +691,24 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
 
                 {/* Footer */}
                 <div className="px-6 py-3 border-t border-gray-800 bg-gray-950/50 flex items-center justify-between">
-                    <button
-                        onClick={() => {
-                            localStorage.removeItem('pokepelago_tour_completed');
-                            localStorage.removeItem('pokepelago_tour_seen_prompt');
-                            window.dispatchEvent(new Event('pokepelago_tour_restart'));
-                        }}
-                        className="text-[10px] text-gray-600 hover:text-gray-400 transition-colors"
-                    >
-                        Restart guided tour
-                    </button>
+                    <div className="flex items-center gap-3">
+                        <button
+                            onClick={() => window.dispatchEvent(new Event('pokepelago_intro_open'))}
+                            className="text-[10px] text-gray-600 hover:text-gray-400 transition-colors"
+                        >
+                            What is Pok&eacute;pelago?
+                        </button>
+                        <button
+                            onClick={() => {
+                                localStorage.removeItem('pokepelago_tour_completed');
+                                localStorage.removeItem('pokepelago_tour_seen_prompt');
+                                window.dispatchEvent(new Event('pokepelago_tour_restart'));
+                            }}
+                            className="text-[10px] text-gray-600 hover:text-gray-400 transition-colors"
+                        >
+                            Restart guided tour
+                        </button>
+                    </div>
                     <a
                         href="https://ko-fi.com/dowlle"
                         target="_blank"

@@ -1,6 +1,6 @@
 # AI usage in Pokepelago
 
-I use AI while developing Pokepelago. It helps me write and review code, investigate bugs, and keep the web client and the apworld in step. I make the design decisions, choose what enters a release, and remain responsible for the result.
+I use AI coding tools, currently Claude Code, Codex and OpenCode, while developing Pokepelago. They help me write and review code, investigate bugs, and keep the web client and the apworld in step. I make the design decisions, choose what enters a release, and remain responsible for the result.
 
 I have ADHD, and AI assistance helps me carry ideas through the long implementation and verification work needed to finish them. That is the practical reason I use it.
 

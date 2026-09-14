@@ -14,6 +14,7 @@
     "preview": "vite preview",
     "test": "vitest",
     "test:run": "vitest run",
+    "test:electron": "node --test electron/protocol.test.cjs",
     "electron:dev": "concurrently -k \"npm run dev\" \"wait-on http://localhost:5173 && electron . --dev\"",
     "electron:build": "cross-env VITE_DESKTOP=true npm run build && electron-builder",
     "electron:win": "cross-env VITE_DESKTOP=true npm run build && electron-builder --win",
@@ -64,6 +65,14 @@
   "build": {
     "appId": "com.dowlle.pokepelago",
     "productName": "Pokepelago Client",
+    "protocols": [
+      {
+        "name": "Pokepelago",
+        "schemes": [
+          "pokepelago"
+        ]
+      }
+    ],
     "files": [
       "dist/**/*",
       "electron/**/*",

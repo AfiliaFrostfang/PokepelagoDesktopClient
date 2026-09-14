@@ -5,7 +5,7 @@ Welcome to the **[Pokepelago Desktop Client](https://github.com/AfiliaFrostfang/
 This client allows you to play Pokepelago in a Webclient on your PC rather then needing to use your Browser.
 
 ## Installation
-1. Download the latest Setup [here](https://github.com/AfiliaFrostfang/PokepelagoDesktopClient/releases).
+1. Download the latest Setup [here](https://github.com/AfiliaFrostfang/PokepelagoDesktopClient/releases/latest).
 2. Launch the Client from your Desktop.
 3. Follow along further down with How to Connect & How to Play.
 

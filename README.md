@@ -34,7 +34,7 @@ Make sure you have [Node.js](https://nodejs.org/) installed on your machine.
 
 4. **Build a desktop package**:
 
-   As of version 0.6.3a, building now uses a cleaner, more user-friendly approach.
+   As of version 0.6.4, building now uses a cleaner, more user-friendly approach.
    Electron has dedicated commands for each OS.
 
    The packaged app is output to the `release/` folder (for example: `D:\PokepelagoDesktopClient\release`).

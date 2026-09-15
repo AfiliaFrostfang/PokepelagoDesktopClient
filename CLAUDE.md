@@ -12,7 +12,7 @@ npm run preview      # Preview production build locally
 npx tsc --noEmit     # Type-check without emitting
 ```
 
-No test framework is configured. CI runs: `tsc --noEmit`, `eslint`, and `npm audit --audit-level=high`.
+Tests run on Vitest (`npm run test:run`, or `npx vitest` to watch). Tests live next to the code as `src/**/*.test.ts(x)`. The default environment is `node`; add a `// @vitest-environment jsdom` docblock to a file that needs a DOM. CI runs: `tsc --noEmit`, `eslint`, `vitest run`, and `npm audit --audit-level=high`.
 
 ## Architecture
 

@@ -1,8 +1,10 @@
 # Pokepelago Client
 
-Welcome to the **[Pokepelago Client](https://dowlle.github.io/PokepelagoClient/)**, the companion React web application for the Archipelago Pokepelago APWorld!
+Welcome to the **[Pokepelago Client](https://pokepelago.ap-pie.com/)**, the companion React web application for the Archipelago Pokepelago APWorld!
 
 This client allows you to visually track your progress, track your caught Pokémon, and interact with the Archipelago multiworld server in a highly polished, interactive Pokédex interface.
+
+New to Pokepelago? The main setup guide lives on AP-Pie: [Pokepelago setup guide](https://ap-pie.com/guides/pokepelago). It covers the `.apworld` install, the YAML, and connecting.
 
 ## Features
 
@@ -39,16 +41,16 @@ Make sure you have [Node.js](https://nodejs.org/) installed on your machine.
 
 ## How to Connect
 
-> **Important:** This client runs in your web browser -- you do **not** launch it from the Archipelago Launcher.
+> **Note:** This client runs in your web browser. Since apworld 0.6.5, clicking your slot link on the room page opens a chooser in the Archipelago Launcher that can open the web client for you; you can also just open the address below.
 
-1. Open the [Pokepelago Client](https://dowlle.github.io/PokepelagoClient/) in your browser (Chrome or Firefox recommended).
+1. Open the [Pokepelago Client](https://pokepelago.ap-pie.com/) in your browser (Chrome or Firefox recommended).
 2. Enter your AP server address (hostname and port), your slot name, and password (if any).
 3. The client connects to the server via WebSocket. If your server uses HTTPS, the client will use a secure connection automatically.
 
 ## How to Play
 
 1. Start your Archipelago Server with the Pokepelago `.apworld` generated seed.
-2. Open the [Pokepelago Client](https://dowlle.github.io/PokepelagoClient/) in your browser.
+2. Open the [Pokepelago Client](https://pokepelago.ap-pie.com/) in your browser.
 3. Enter your **Hostname**, **Port**, and **Slot Name** (e.g., `AshKetchum`) in the connection prompt.
 4. Once connected, your `Oak's Lab` starting items will automatically sync.
 5. Use the input bar at the bottom to "guess" Pokémon names. 

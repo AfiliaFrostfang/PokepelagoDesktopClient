@@ -65,8 +65,6 @@ export const TwitchProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     });
 
     const channelRef = useRef<BroadcastChannel | null>(null);
-    // Guard to prevent overlay's addGuess from broadcasting back
-    const fromBroadcastRef = useRef(false);
 
     // Load persisted data when slot changes
     useEffect(() => {
@@ -140,8 +138,8 @@ export const TwitchProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             return next;
         });
 
-        // Broadcast to overlay tabs (main tab only, skip if this was received from broadcast)
-        if (!isOverlay && !fromBroadcastRef.current) {
+        // Broadcast to overlay tabs (main tab only; overlay tabs never rebroadcast)
+        if (!isOverlay) {
             channelRef.current?.postMessage({
                 type: 'guess',
                 pokemonId, pokemonName, username, resultType,

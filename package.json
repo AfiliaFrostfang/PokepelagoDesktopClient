@@ -105,7 +105,8 @@
         "AppImage",
         "deb"
       ],
-      "icon": "public/icon.png"
+      "icon": "public/icon.png",
+      "category": "Games"
     }
   },
   "allowScripts": {

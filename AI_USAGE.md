@@ -8,7 +8,7 @@ I have Autism and probably undiagnosted ADHD, pair that with being an introvert 
 
 ## Verification
 
-AI-generated work is treated like any other untrusted contribution. Changes are checked against the game's rules and the project's own data rather than accepted because they compile or make a test pass. The client runs type checks, lint, unit tests and a dependency audit on every pull request. Apworld releases run through the Archipelago fuzz matrix on thousands of seeds and do not ship with a failing run, and the client has its own seed completability check. Releases are played in the browser against real seeds before they go live.
+AI-generated work is treated like any other untrusted contribution. Changes are checked against the game's rules and the project's own data rather than accepted because they compile or make a test pass. Builds and new Functions are tested against real Seeds before Release or Released as Dev Builds.
 
 ## Art, sound and existing work
 

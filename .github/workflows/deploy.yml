@@ -25,6 +25,8 @@ jobs:
 
       - name: Build
         run: npm run build
+        env:
+          VITE_TWITCH_CHAT: 'true'
 
       - name: Deploy to GitHub Pages
         uses: JamesIves/github-pages-deploy-action@v4

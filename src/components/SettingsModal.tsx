@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Image, Trash2, Upload, Link2, Monitor, Maximize, LayoutGrid, Tv, LogIn, LogOut, Palette, Settings, Volume2 } from 'lucide-react';
+import { X, Image, Trash2, Upload, Link2, Monitor, Maximize, LayoutGrid, Tv, LogIn, LogOut, Palette, Settings, Volume2, AlertTriangle } from 'lucide-react';
 import { useGame } from '../context/GameContext';
 import { importFromFiles, clearAllSprites } from '../services/spriteService';
 import { getTwitchAuthUrl, getTwitchUsername, clearTwitchAuth, hasTwitchClientId } from '../services/twitchAuthService';
+import { useTwitchAuthStatus } from '../hooks/useTwitchAuthStatus';
 import { THEMES } from '../utils/themes';
 import type { ThemeId } from '../utils/themes';
 import { ObsOverlayBuilder } from './settings/ObsOverlayBuilder';
@@ -43,6 +44,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
     const [twitchAuthUser, setTwitchAuthUser] = useState(() => getTwitchUsername());
     const [chatFeedback, setChatFeedback] = useState(() => localStorage.getItem('pokepelago_twitch_chat_feedback') !== 'false');
     const [twitchIntegration, setTwitchIntegration] = useState(() => localStorage.getItem('pokepelago_twitch_integration') === 'true');
+    const { needsReauth: twitchNeedsReauth } = useTwitchAuthStatus();
 
     // Listen for auth changes
     React.useEffect(() => {
@@ -645,13 +647,24 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                                                         </button>
                                                     </div>
                                                 ) : (
-                                                    <button
-                                                        onClick={() => { window.location.href = getTwitchAuthUrl(); }}
-                                                        className="w-full flex items-center justify-center gap-2 py-2.5 bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 border border-purple-500/30 hover:border-purple-500/50 rounded-lg text-xs font-bold transition-all"
-                                                    >
-                                                        <LogIn size={14} />
-                                                        Connect Twitch Account
-                                                    </button>
+                                                    <>
+                                                        {twitchNeedsReauth && (
+                                                            <div className="flex items-start gap-2 p-3 bg-amber-900/10 border border-amber-700/30 rounded-lg">
+                                                                <AlertTriangle size={14} className="text-amber-400 shrink-0 mt-0.5" />
+                                                                <div>
+                                                                    <div className="text-xs font-bold text-amber-300">Twitch sign-in expired, reconnect</div>
+                                                                    <div className="text-[9px] text-gray-500">Chat guessing still works, but the bot cannot post confirmations until you sign in again.</div>
+                                                                </div>
+                                                            </div>
+                                                        )}
+                                                        <button
+                                                            onClick={() => { window.location.href = getTwitchAuthUrl(); }}
+                                                            className="w-full flex items-center justify-center gap-2 py-2.5 bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 border border-purple-500/30 hover:border-purple-500/50 rounded-lg text-xs font-bold transition-all"
+                                                        >
+                                                            <LogIn size={14} />
+                                                            {twitchNeedsReauth ? 'Reconnect Twitch Account' : 'Connect Twitch Account'}
+                                                        </button>
+                                                    </>
                                                 )}
                                                 <p className="text-[9px] text-gray-600">Login lets the bot post correct guess confirmations back to your chat.</p>
 

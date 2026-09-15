@@ -1,6 +1,8 @@
 import React from 'react';
-import { Trophy, Clock } from 'lucide-react';
+import { Trophy, Clock, AlertTriangle, LogIn } from 'lucide-react';
 import { useTwitch, type GuessFeedEntry } from '../context/TwitchContext';
+import { useTwitchAuthStatus } from '../hooks/useTwitchAuthStatus';
+import { getTwitchAuthUrl } from '../services/twitchAuthService';
 
 const FeedEntry: React.FC<{ entry: GuessFeedEntry }> = ({ entry }) => {
     const timeAgo = getTimeAgo(entry.timestamp);
@@ -26,8 +28,28 @@ function getTimeAgo(timestamp: number): string {
     return `${Math.floor(seconds / 86400)}d`;
 }
 
+const ReauthNotice: React.FC = () => (
+    <div className="shrink-0 m-2 p-3 rounded-lg bg-amber-900/10 border border-amber-700/30">
+        <div className="flex items-start gap-2">
+            <AlertTriangle size={14} className="text-amber-400 shrink-0 mt-0.5" />
+            <div className="min-w-0">
+                <div className="text-xs font-bold text-amber-300">Twitch sign-in expired, reconnect</div>
+                <div className="text-[9px] text-gray-500">Guesses still count, but the bot cannot post confirmations until you sign in again.</div>
+            </div>
+        </div>
+        <button
+            onClick={() => { window.location.href = getTwitchAuthUrl(); }}
+            className="mt-2 w-full flex items-center justify-center gap-2 py-2 bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 border border-purple-500/30 hover:border-purple-500/50 rounded-lg text-xs font-bold transition-all"
+        >
+            <LogIn size={14} />
+            Reconnect Twitch Account
+        </button>
+    </div>
+);
+
 export const TwitchLeaderboard: React.FC = () => {
     const { leaderboard, guessFeed } = useTwitch();
+    const { needsReauth } = useTwitchAuthStatus();
 
     const sorted = React.useMemo(() =>
         Array.from(leaderboard.entries())
@@ -40,16 +62,20 @@ export const TwitchLeaderboard: React.FC = () => {
 
     if (isEmpty) {
         return (
-            <div className="flex flex-col items-center justify-center h-full text-gray-500 text-sm px-6 py-12 text-center">
-                <Trophy size={28} className="mb-3 text-gray-600" />
-                <p className="font-medium text-gray-400">No guesses yet</p>
-                <p className="text-xs mt-1">Twitch chat guesses and manual guesses will appear here.</p>
+            <div className="flex flex-col h-full overflow-y-auto">
+                {needsReauth && <ReauthNotice />}
+                <div className="flex flex-col items-center justify-center flex-1 text-gray-500 text-sm px-6 py-12 text-center">
+                    <Trophy size={28} className="mb-3 text-gray-600" />
+                    <p className="font-medium text-gray-400">No guesses yet</p>
+                    <p className="text-xs mt-1">Twitch chat guesses and manual guesses will appear here.</p>
+                </div>
             </div>
         );
     }
 
     return (
         <div className="flex flex-col h-full overflow-hidden">
+            {needsReauth && <ReauthNotice />}
             {/* Leaderboard */}
             {sorted.length > 0 && (
                 <div className="shrink-0 border-b border-gray-800 pb-2">

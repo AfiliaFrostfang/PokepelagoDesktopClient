@@ -2,7 +2,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
-import { parseTwitchTokenFromHash, clearHashFromUrl, storeTwitchToken, validateTwitchToken, storeTwitchUsername } from './services/twitchAuthService'
+import { parseTwitchTokenFromHash, clearHashFromUrl, storeTwitchToken, validateTwitchToken, storeTwitchUsername, notifyTwitchAuthChanged, expireTwitchAuth } from './services/twitchAuthService'
 import { markBoot } from './utils/perfHarness';
 
 markBoot();
@@ -16,7 +16,10 @@ if (twitchToken) {
     validateTwitchToken(twitchToken).then(result => {
         if (result) {
             storeTwitchUsername(result.login);
-            window.dispatchEvent(new Event('pokepelago_twitch_auth_changed'));
+            notifyTwitchAuthChanged();
+        } else {
+            // Twitch rejected the fresh token — do not leave a dead token behind.
+            expireTwitchAuth();
         }
     });
 }

@@ -3,7 +3,13 @@ import tmi from 'tmi.js';
 import { useGame } from '../context/GameContext';
 import { useTwitch } from '../context/TwitchContext';
 import { useGuessEngine, type LanguageCode } from './useGuessEngine';
-import { getTwitchToken, getTwitchUsername } from '../services/twitchAuthService';
+import {
+    TOKEN_VALIDATE_INTERVAL_MS,
+    TWITCH_AUTH_CHANGED_EVENT,
+    getTwitchToken,
+    getTwitchUsername,
+    revalidateTwitchToken,
+} from '../services/twitchAuthService';
 
 interface UseTwitchChatOptions {
     enabled: boolean;
@@ -40,9 +46,30 @@ export function useTwitchChat({ enabled, channelName, selectedLanguage }: UseTwi
             setAuthToken(getTwitchToken());
             setAuthUsername(getTwitchUsername());
         };
-        window.addEventListener('pokepelago_twitch_auth_changed', handler);
-        return () => window.removeEventListener('pokepelago_twitch_auth_changed', handler);
+        window.addEventListener(TWITCH_AUTH_CHANGED_EVENT, handler);
+        return () => window.removeEventListener(TWITCH_AUTH_CHANGED_EVENT, handler);
     }, []);
+
+    // Twitch expires implicit-grant tokens after ~4h and requires connected apps to
+    // re-validate hourly. Without this the integration used to die silently mid-stream.
+    useEffect(() => {
+        if (!enabled || !authToken) return;
+        let cancelled = false;
+        const check = () => {
+            if (cancelled || document.visibilityState === 'hidden') return;
+            // Failure clears the stored auth and dispatches the auth-changed event,
+            // which drops us back to an anonymous connection and shows the reconnect notice.
+            void revalidateTwitchToken();
+        };
+        const interval = setInterval(check, TOKEN_VALIDATE_INTERVAL_MS);
+        const onVisible = () => { if (document.visibilityState === 'visible') check(); };
+        document.addEventListener('visibilitychange', onVisible);
+        return () => {
+            cancelled = true;
+            clearInterval(interval);
+            document.removeEventListener('visibilitychange', onVisible);
+        };
+    }, [enabled, authToken]);
 
     const attemptGuessRef = useRef(attemptGuess);
     const showToastRef = useRef(showToast);

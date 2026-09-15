@@ -2,6 +2,8 @@
 
 I use AI coding tools, currently Github CoPilot to debug build issues and new functionality that I brainstormed and coded in.
 
+New Features are never coded with AI Tools, they are written by hand, which is why I sometimes take a while for it as I am a Newbie in most Languages.
+
 I have Autism and probably undiagnosted ADHD, pair that with being an introvert and things become complicated sometimes.
 
 ## Verification

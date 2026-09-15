@@ -1,8 +1,8 @@
-# AI usage in Pokepelago
+# AI usage in PokepelagoDesktopClient
 
-I use AI coding tools, currently Claude Code, Codex and OpenCode, while developing Pokepelago. They help me write and review code, investigate bugs, and keep the web client and the apworld in step. I make the design decisions, choose what enters a release, and remain responsible for the result.
+I use AI coding tools, currently Github CoPilot to debug build issues and new functionality that I brainstormed and coded in.
 
-I have ADHD, and AI assistance helps me carry ideas through the long implementation and verification work needed to finish them. That is the practical reason I use it.
+I have Autism and probably undiagnosted ADHD, pair that with being an introvert and things become complicated sometimes.
 
 ## Verification
 
@@ -10,7 +10,7 @@ AI-generated work is treated like any other untrusted contribution. Changes are 
 
 ## Art, sound and existing work
 
-The project does not use AI-generated art. Pokémon sprites come from PokéAPI, the Derpemon Community Project, and SpriteCollab's Mystery Dungeon sprites, or from files players import themselves. The notification sounds were contributed by AfiliaFrostfang. Pokepelago builds on the work of Archipelago contributors and the sprite communities above, and they are credited in the client's credits screen.
+The project does not use AI-generated art. Pokémon sprites come from PokéAPI, the Derpemon Community Project, and SpriteCollab's Mystery Dungeon sprites, or from files players import themselves. The notification sounds were contributed by me and extracted from Pokemon Crystal. Pokepelago builds on the work of Archipelago contributors and the sprite communities above, and they are credited in the client's credits screen.
 
 ## Environmental footprint
 

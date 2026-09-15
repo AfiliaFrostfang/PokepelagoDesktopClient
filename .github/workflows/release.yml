@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - "v*"
+      - "*-dev*"
   workflow_dispatch:
 
 permissions:
@@ -53,7 +54,12 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.name }}
-          path: release/
+          path: |
+            release/*.exe
+            release/*.deb
+            release/*.AppImage
+            release/*.dmg
+            release/*.zip
 
 
   release:
@@ -71,6 +77,10 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            release-files/**/*
+            release-files/**/*.exe
+            release-files/**/*.deb
+            release-files/**/*.AppImage
+            release-files/**/*.dmg
+            release-files/**/*.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

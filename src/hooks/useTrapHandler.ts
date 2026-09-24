@@ -11,6 +11,7 @@ import { decodeUsefulItem } from '../data/itemDecoding';
 interface UseTrapHandlerParams {
     offsetsRef: MutableRefObject<OffsetTable>;
     checkedIdsRef: MutableRefObject<Set<number>>;
+    selfCheckedIdsRef: MutableRefObject<Set<number>>;
     isPokemonGuessableRef: MutableRefObject<((id: number) => { canGuess: boolean }) | null>;
     allPokemon: PokemonRef[];
     derpemonIndex: DerpemonIndex;
@@ -20,7 +21,7 @@ interface UseTrapHandlerParams {
 }
 
 export function useTrapHandler({
-    offsetsRef, checkedIdsRef, isPokemonGuessableRef,
+    offsetsRef, checkedIdsRef, selfCheckedIdsRef, isPokemonGuessableRef,
     allPokemon, derpemonIndex, startingStarter, showToast, addLog,
 }: UseTrapHandlerParams) {
     const [shuffleEndTime, setShuffleEndTime] = useState<number>(0);
@@ -166,7 +167,11 @@ export function useTrapHandler({
             const starterId = startingStarter
                 ? allPokemon.find(p => p.name.toLowerCase() === startingStarter.toLowerCase())?.id
                 : undefined;
-            const validCheckedIds = Array.from(checkedIdsRef.current).filter(
+            // Only release Pokémon the player's own slot actually caught. Using
+            // selfCheckedIdsRef (not checkedIdsRef) keeps room/shared-slot checks
+            // out of the pool, so a Release Trap can never reveal a Pokémon that
+            // nobody in this session has guessed.
+            const validCheckedIds = Array.from(selfCheckedIdsRef.current).filter(
                 id => id !== starterId && !newReleased.has(id)
             );
             let toAdd = totalServer - processedCount;

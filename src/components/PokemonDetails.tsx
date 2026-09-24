@@ -17,6 +17,7 @@ export const PokemonDetails: React.FC = () => {
         allPokemon,
         unlockedIds,
         checkedIds,
+        releasedIds,
         hintedIds,
         shinyIds,
         say,
@@ -122,6 +123,10 @@ export const PokemonDetails: React.FC = () => {
 
     const pokemon = allPokemon.find(p => p.id === selectedPokemonId);
     const isChecked = selectedPokemonId ? checkedIds.has(selectedPokemonId) : false;
+    // A released Pokémon ran away and must be guessed again — treat it as not
+    // currently known so it stays a shadow (no name/types/location/scout spoilers).
+    const isReleased = selectedPokemonId ? releasedIds.has(selectedPokemonId) : false;
+    const isCaughtNow = isChecked && !isReleased;
     const isHinted = selectedPokemonId ? hintedIds.has(selectedPokemonId) : false;
     // Only re-runs this effect when the selected pokemon's own derpy state flips,
     // so opening the detail view does not force a full re-fetch on every Derp trap.
@@ -193,7 +198,7 @@ export const PokemonDetails: React.FC = () => {
         loadLocalSprites();
 
         // Scout item contents
-        if (isChecked && isConnected) {
+        if (isCaughtNow && isConnected) {
             scoutLocation(selectedPokemonId + locationOffset).then(res => {
                 if (active && res) setScoutedItem(res);
             }).catch(e => console.warn('Failed to scout location', e));
@@ -203,17 +208,17 @@ export const PokemonDetails: React.FC = () => {
             active = false;
             if (createdUrl && createdUrl.startsWith('blob:')) URL.revokeObjectURL(createdUrl);
         };
-    }, [selectedPokemonId, uiSettings.spriteSet, allPokemon, isChecked, isConnected, scoutLocation, shinyIds, getSpriteUrl, spriteRefreshCounter, locationOffset, isDerpified]);
+    }, [selectedPokemonId, uiSettings.spriteSet, allPokemon, isCaughtNow, isConnected, scoutLocation, shinyIds, getSpriteUrl, spriteRefreshCounter, locationOffset, isDerpified]);
 
     if (!selectedPokemonId || !pokemon) return null;
 
     const isUnlocked = unlockedIds.has(selectedPokemonId);
     const isShiny = shinyIds.has(selectedPokemonId);
 
-    // Only show name and real info if guessed (checked)
-    const showInfo = isChecked;
+    // Only show name and real info if guessed (checked) and not currently released
+    const showInfo = isCaughtNow;
     // FEAT-08 sub-1: also show shadow when global shadows setting is on, regardless of isUnlocked
-    const showShadow = !isChecked && (isUnlocked || uiSettings.enableShadows);
+    const showShadow = !showInfo && (isUnlocked || uiSettings.enableShadows || isReleased);
 
     const handleHintClick = (itemName: string) => {
         if (pendingHint === itemName) {
@@ -288,14 +293,14 @@ export const PokemonDetails: React.FC = () => {
                 </div>
 
                 {/* Pokemon Display */}
-                <div className={`h-48 flex items-center justify-center relative overflow-hidden ${isShiny && isChecked ? 'bg-linear-to-b from-yellow-900/20 to-transparent' : 'bg-gray-800/20'}`}>
+                <div className={`h-48 flex items-center justify-center relative overflow-hidden ${isShiny && isCaughtNow ? 'bg-linear-to-b from-yellow-900/20 to-transparent' : 'bg-gray-800/20'}`}>
                     {loading && (
                         <div className="w-12 h-12 border-4 border-blue-500 rounded-full animate-spin border-t-transparent opacity-50 absolute z-0"></div>
                     )}
 
-                    {isUnlocked || isChecked || uiSettings.enableShadows ? (
+                    {isUnlocked || isChecked || isReleased || uiSettings.enableShadows ? (
                         <div className="relative">
-                            {isShiny && isChecked && (
+                            {isShiny && isCaughtNow && (
                                 <div className="absolute -inset-8 bg-yellow-500/10 blur-3xl animate-pulse rounded-full" />
                             )}
                             {normalizedPmdUrl ? (
@@ -349,7 +354,7 @@ export const PokemonDetails: React.FC = () => {
                         <div>
                             <h2 className="text-2xl font-black text-white uppercase tracking-tight flex items-center gap-2">
                                 {displayName}
-                                {isShiny && isChecked && gifLoaded && <Sparkles size={20} className="text-yellow-400" />}
+                                {isShiny && isCaughtNow && gifLoaded && <Sparkles size={20} className="text-yellow-400" />}
                             </h2>
                             <p className="text-xs text-gray-500 font-mono">National Dex #{selectedPokemonId}</p>
                         </div>
@@ -404,13 +409,13 @@ export const PokemonDetails: React.FC = () => {
                     ) : (
                         <div className="h-24 flex items-center justify-center bg-gray-800/10 rounded-xl border border-dashed border-gray-800">
                             <p className="text-xs text-gray-600 italic">
-                                {!isChecked ? "Unlock and guess this Pokémon to reveal its data" : "Loading data..."}
+                                {!showInfo ? "Unlock and guess this Pokémon to reveal its data" : "Loading data..."}
                             </p>
                         </div>
                     )}
 
                     {/* Requirements Section */}
-                    {!isChecked && !canGuess && (missingRegion || missingTypes || missingPokemon || missingRouteKeys || missingLineUnlock || badgeLevelRequired || reason) && (
+                    {!showInfo && !canGuess && (missingRegion || missingTypes || missingPokemon || missingRouteKeys || missingLineUnlock || badgeLevelRequired || reason) && (
                         <div className="bg-red-900/10 border border-red-500/30 rounded-xl p-4 space-y-3 animate-in fade-in slide-in-from-top-2 duration-500">
                             <div className="flex items-center gap-2 text-red-400 font-bold text-xs uppercase tracking-wider">
                                 <Lock size={14} />
@@ -540,7 +545,7 @@ export const PokemonDetails: React.FC = () => {
                             <span>Archipelago Data</span>
                         </div>
 
-                        {isChecked && (
+                        {showInfo && (
                             <div className="bg-green-900/10 border border-green-500/20 rounded-xl p-4 flex items-start gap-3 animate-in fade-in duration-500">
                                 <CheckCircle2 size={18} className="text-green-500 mt-0.5" />
                                 <div>
@@ -562,7 +567,7 @@ export const PokemonDetails: React.FC = () => {
                             </div>
                         )}
 
-                        {isHinted && !isChecked && (
+                        {isHinted && !showInfo && (
                             <div className="bg-indigo-900/20 border border-indigo-500/30 rounded-xl p-4 flex items-start gap-3">
                                 <MapPin size={18} className="text-indigo-400 mt-0.5" />
                                 <div>
@@ -574,7 +579,7 @@ export const PokemonDetails: React.FC = () => {
                         )}
 
 
-                        {isUnlocked && !isChecked && (
+                        {isUnlocked && !showInfo && (
                             <div className={`bg-blue-900/10 border border-blue-500/20 rounded-xl p-4 flex items-middle gap-3 ${!canGuess ? 'opacity-50 grayscale' : ''}`}>
                                 <HelpCircle size={18} className="text-blue-400" />
                                 <span className="text-xs text-blue-300/80 font-medium whitespace-pre-line">
@@ -584,7 +589,7 @@ export const PokemonDetails: React.FC = () => {
                         )}
 
                         {/* Special Items Section */}
-                        {!isChecked && (
+                        {!showInfo && (
                             <div className="pt-2">
                                 <div className="flex items-center justify-between text-[10px] font-black uppercase text-gray-600 tracking-widest border-b border-gray-800 pb-2 mb-4">
                                     <span>Utility Items</span>
@@ -659,7 +664,7 @@ export const PokemonDetails: React.FC = () => {
                     </div>
 
                     {/* Guess Credit */}
-                    {isChecked && selectedPokemonId && getCredit(selectedPokemonId) && (
+                    {showInfo && selectedPokemonId && getCredit(selectedPokemonId) && (
                         <div className="flex items-center justify-center gap-1.5 text-[10px] text-purple-400/70 animate-in fade-in duration-500">
                             <User size={10} />
                             <span>
@@ -672,7 +677,7 @@ export const PokemonDetails: React.FC = () => {
                     )}
 
                     {/* Derpemon Creator Credit */}
-                    {derpemonCreator && (isUnlocked || isChecked) && (
+                    {derpemonCreator && (isUnlocked || showInfo) && (
                         <div className="flex items-center justify-center gap-1.5 text-[10px] text-purple-400/70 animate-in fade-in duration-500">
                             <Palette size={10} />
                             <span>

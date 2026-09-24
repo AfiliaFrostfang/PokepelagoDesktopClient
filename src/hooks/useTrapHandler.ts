@@ -11,6 +11,7 @@ import { decodeUsefulItem } from '../data/itemDecoding';
 interface UseTrapHandlerParams {
     offsetsRef: MutableRefObject<OffsetTable>;
     checkedIdsRef: MutableRefObject<Set<number>>;
+    selfCheckedIdsRef: MutableRefObject<Set<number>>;
     isPokemonGuessableRef: MutableRefObject<((id: number) => { canGuess: boolean }) | null>;
     allPokemon: PokemonRef[];
     derpemonIndex: DerpemonIndex;
@@ -20,7 +21,7 @@ interface UseTrapHandlerParams {
 }
 
 export function useTrapHandler({
-    offsetsRef, checkedIdsRef, isPokemonGuessableRef,
+    offsetsRef, checkedIdsRef, selfCheckedIdsRef, isPokemonGuessableRef,
     allPokemon, derpemonIndex, startingStarter, showToast, addLog,
 }: UseTrapHandlerParams) {
     const [shuffleEndTime, setShuffleEndTime] = useState<number>(0);
@@ -166,7 +167,10 @@ export function useTrapHandler({
             const starterId = startingStarter
                 ? allPokemon.find(p => p.name.toLowerCase() === startingStarter.toLowerCase())?.id
                 : undefined;
-            const validCheckedIds = Array.from(checkedIdsRef.current).filter(
+            // Prefer Pokémon the player's own slot caught: selfCheckedIdsRef keeps
+            // room updates from this connection out of the pool. The spoiler guard
+            // for released Pokémon lives in PokemonDetails (isCaughtNow).
+            const validCheckedIds = Array.from(selfCheckedIdsRef.current).filter(
                 id => id !== starterId && !newReleased.has(id)
             );
             let toAdd = totalServer - processedCount;

@@ -167,10 +167,9 @@ export function useTrapHandler({
             const starterId = startingStarter
                 ? allPokemon.find(p => p.name.toLowerCase() === startingStarter.toLowerCase())?.id
                 : undefined;
-            // Only release Pokémon the player's own slot actually caught. Using
-            // selfCheckedIdsRef (not checkedIdsRef) keeps room/shared-slot checks
-            // out of the pool, so a Release Trap can never reveal a Pokémon that
-            // nobody in this session has guessed.
+            // Prefer Pokémon the player's own slot caught: selfCheckedIdsRef keeps
+            // room updates from this connection out of the pool. The spoiler guard
+            // for released Pokémon lives in PokemonDetails (isCaughtNow).
             const validCheckedIds = Array.from(selfCheckedIdsRef.current).filter(
                 id => id !== starterId && !newReleased.has(id)
             );

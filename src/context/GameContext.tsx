@@ -481,6 +481,11 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     // ── Refs used by event handlers ──────────────────────────────────────────────
     const checkedIdsRef = useRef<Set<number>>(checkedIds);
+    // Pokémon the player's own slot actually guessed/caught (NOT room/shared-slot
+    // pushes via onRoomUpdate). Used as the Release Trap candidate pool. onConnected
+    // resets it to the server's full checked set, so it only filters room updates
+    // received during the current connection.
+    const selfCheckedIdsRef = useRef<Set<number>>(checkedIds);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const isPokemonGuessableRef = useRef<any>(null);
     const connectionInfoRef = useRef(connectionInfo);
@@ -536,6 +541,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } = useTrapHandler({
         offsetsRef,
         checkedIdsRef,
+        selfCheckedIdsRef,
         isPokemonGuessableRef,
         allPokemon,
         derpemonIndex,
@@ -750,6 +756,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }, []);
 
     const checkPokemon = useCallback((id: number) => {
+        selfCheckedIdsRef.current.add(id);
         setCheckedIds(prev => {
             if (prev.has(id)) return prev;
             const next = new Set(prev); next.add(id); return next;
@@ -813,6 +820,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
             }
         }
         if (newChecked.size > 0) {
+            newChecked.forEach(id => selfCheckedIdsRef.current.add(id));
             setCheckedIds(prev => { const next = new Set(prev); newChecked.forEach(id => next.add(id)); return next; });
         }
     }, [isConnected, gameMode]);
@@ -1242,9 +1250,12 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
             const slot = clientRef.current.players.self.slot;
             clientRef.current.storage.prepare(`pokepelago_team_${team}_slot_${slot}_used_masterballs`, []).add([pokemonId]).commit();
         }
-        checkPokemon(pokemonId);
+        // A released Pokémon's location is already checked, so checkPokemon is a
+        // no-op for it; re-catch it explicitly or the ball is spent for nothing.
+        if (releasedIds.has(pokemonId)) recatchPokemon(pokemonId);
+        else checkPokemon(pokemonId);
         addLog({ type: 'system', text: `Used a Master Ball on Pokemon #${pokemonId}!`, isMe: true });
-    }, [masterBalls, masterBallBypassGates, isPokemonGuessable, checkPokemon, addLog]);
+    }, [masterBalls, masterBallBypassGates, isPokemonGuessable, releasedIds, recatchPokemon, checkPokemon, addLog]);
 
     const consumePokegear = useCallback((pokemonId: number) => {
         if (pokegears > 0) {
@@ -1309,6 +1320,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 newChecked.add(locId - o.LOCATION_OFFSET);
         });
         setCheckedIds(newChecked);
+        selfCheckedIdsRef.current = new Set(newChecked);
 
         // Reconstruct received items
         const receivedItems = client.items.received;
@@ -1567,6 +1579,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
             const localCaught = localStorage.getItem(caughtLocalKey);
             if (localCaught) {
                 const ids = JSON.parse(localCaught) as number[];
+                ids.forEach(id => selfCheckedIdsRef.current.add(id));
                 setCheckedIds(prev => new Set([...prev, ...ids]));
             }
         }
@@ -1606,6 +1619,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
             } else if (key === shinyKey) {
                 setShinyIds(new Set(validIds(value)));
             } else if (caughtKey && key === caughtKey) {
+                usedIds.forEach(id => selfCheckedIdsRef.current.add(id));
                 setCheckedIds(prev => new Set([...prev, ...usedIds]));
             }
         }).then((data) => {
@@ -1639,8 +1653,11 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 serverDerpCount,
                 serverReleaseCount,
             );
-            if (caughtKey && Array.isArray(data[caughtKey]))
-                setCheckedIds(prev => new Set([...prev, ...validIds(data[caughtKey])]));
+            if (caughtKey && Array.isArray(data[caughtKey])) {
+                const restoredCaught = validIds(data[caughtKey]);
+                restoredCaught.forEach(id => selfCheckedIdsRef.current.add(id));
+                setCheckedIds(prev => new Set([...prev, ...restoredCaught]));
+            }
         }).catch(console.error);
     }, [currentProfileId, onDataStorageDerpUpdate, onDataStorageReleaseUpdate, onDataStorageRecaughtUpdate, initFromDataStorage]);
 
